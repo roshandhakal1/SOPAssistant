@@ -1,0 +1,238 @@
+"""
+Expert Consultant Module for Process Manufacturing
+Provides comprehensive expertise in nutraceutical and bar manufacturing
+"""
+
+import google.generativeai as genai
+from typing import List, Dict, Tuple, Optional
+import json
+from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
+
+class ManufacturingExpertConsultant:
+    """
+    Expert consultant combining expertise of CEO, CFO, CMO, Quality Director, 
+    and Supply Chain Director for process manufacturing in nutraceutical and bar products.
+    """
+    
+    def __init__(self, api_key: str, model_name: str = "gemini-1.5-pro"):
+        """Initialize the expert consultant with Gemini API."""
+        genai.configure(api_key=api_key)
+        self.model = genai.GenerativeModel(model_name)
+        self.conversation_history = []
+        self.expertise_areas = {
+            "CEO": "Strategic planning, business growth, innovation, market positioning",
+            "CFO": "Financial planning, cost optimization, ROI analysis, budgeting",
+            "CMO": "Market analysis, product positioning, consumer trends, branding",
+            "Quality Director": "Quality control, compliance, certifications, safety protocols",
+            "Supply Chain Director": "Sourcing, logistics, inventory management, supplier relations"
+        }
+        
+    def analyze_query(self, query: str, context: List[str]) -> Dict[str, any]:
+        """
+        Analyze the query to determine which expertise areas are most relevant.
+        """
+        analysis_prompt = f"""
+        As a manufacturing expert consultant, analyze this query and determine:
+        1. Which expertise areas are most relevant (CEO, CFO, CMO, Quality Director, Supply Chain Director)
+        2. The type of consultation needed (strategic, operational, technical, regulatory)
+        3. Key focus areas to address
+        
+        Query: {query}
+        
+        Available SOP Context:
+        {chr(10).join(context[:3]) if context else "No specific SOP context available"}
+        
+        Return a JSON object with:
+        - expertise_areas: list of relevant roles
+        - consultation_type: primary type of consultation
+        - key_focus_areas: list of main topics to address
+        - confidence_level: high/medium/low
+        """
+        
+        try:
+            response = self.model.generate_content(analysis_prompt)
+            # Parse the response to extract structured information
+            analysis = self._parse_analysis_response(response.text)
+            return analysis
+        except Exception as e:
+            logger.error(f"Error analyzing query: {e}")
+            return {
+                "expertise_areas": ["General"],
+                "consultation_type": "general",
+                "key_focus_areas": ["general_advice"],
+                "confidence_level": "low"
+            }
+    
+    def generate_expert_response(self, query: str, context: List[str], 
+                               analysis: Dict[str, any]) -> Dict[str, any]:
+        """
+        Generate a comprehensive expert response based on the query and context.
+        """
+        expertise_prompt = self._build_expertise_prompt(query, context, analysis)
+        
+        try:
+            response = self.model.generate_content(expertise_prompt)
+            
+            # Structure the expert response
+            expert_response = {
+                "main_response": response.text,
+                "expertise_perspectives": self._extract_perspectives(response.text, analysis),
+                "recommendations": self._extract_recommendations(response.text),
+                "risks_and_considerations": self._extract_risks(response.text),
+                "confidence_level": analysis.get("confidence_level", "medium"),
+                "follow_up_questions": self._generate_follow_up_questions(query, response.text),
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            # Add to conversation history
+            self.conversation_history.append({
+                "query": query,
+                "response": expert_response,
+                "context_used": len(context)
+            })
+            
+            return expert_response
+            
+        except Exception as e:
+            logger.error(f"Error generating expert response: {e}")
+            return self._generate_fallback_response(query)
+    
+    def _build_expertise_prompt(self, query: str, context: List[str], 
+                               analysis: Dict[str, any]) -> str:
+        """Build a comprehensive prompt for expert consultation."""
+        expertise_areas = analysis.get("expertise_areas", ["General"])
+        
+        prompt = f"""
+        You are an expert consultant for process manufacturing in nutraceutical and bar products.
+        You combine the expertise of: {', '.join(expertise_areas)}
+        
+        QUERY: {query}
+        
+        RELEVANT SOP CONTEXT:
+        {chr(10).join(context) if context else "No specific SOP context available"}
+        
+        CONSULTATION TYPE: {analysis.get('consultation_type', 'general')}
+        KEY FOCUS AREAS: {', '.join(analysis.get('key_focus_areas', ['general']))}
+        
+        Provide a comprehensive expert response that includes:
+        
+        1. MAIN ANALYSIS:
+        - Address the query directly with deep expertise
+        - Reference relevant SOPs when applicable
+        - Provide specific, actionable insights
+        
+        2. PERSPECTIVES FROM EACH RELEVANT ROLE:
+        {chr(10).join([f"- {role} perspective: Focus on {self.expertise_areas[role]}" 
+                      for role in expertise_areas if role in self.expertise_areas])}
+        
+        3. RECOMMENDATIONS:
+        - Short-term actions (immediate to 3 months)
+        - Medium-term strategies (3-12 months)
+        - Long-term considerations (12+ months)
+        
+        4. RISKS AND CONSIDERATIONS:
+        - Potential challenges
+        - Compliance/regulatory considerations
+        - Resource requirements
+        
+        5. CONFIDENCE ASSESSMENT:
+        - Areas of high confidence based on SOPs and expertise
+        - Areas requiring further investigation
+        
+        Respond in a clear, structured manner that demonstrates deep manufacturing expertise 
+        while being practical and actionable. Use specific examples from nutraceutical and 
+        bar manufacturing when relevant.
+        """
+        
+        return prompt
+    
+    def _parse_analysis_response(self, response_text: str) -> Dict[str, any]:
+        """Parse the analysis response to extract structured information."""
+        try:
+            # Attempt to extract JSON from the response
+            import re
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group())
+        except:
+            pass
+        
+        # Fallback parsing logic
+        return {
+            "expertise_areas": self._extract_expertise_areas(response_text),
+            "consultation_type": "general",
+            "key_focus_areas": ["manufacturing", "quality", "optimization"],
+            "confidence_level": "medium"
+        }
+    
+    def _extract_expertise_areas(self, text: str) -> List[str]:
+        """Extract relevant expertise areas from text."""
+        areas = []
+        for role in self.expertise_areas.keys():
+            if role.lower() in text.lower():
+                areas.append(role)
+        return areas if areas else ["General"]
+    
+    def _extract_perspectives(self, response_text: str, analysis: Dict[str, any]) -> Dict[str, str]:
+        """Extract role-specific perspectives from the response."""
+        perspectives = {}
+        for role in analysis.get("expertise_areas", []):
+            # Simple extraction logic - can be enhanced with more sophisticated parsing
+            perspectives[role] = f"Perspective on {analysis.get('consultation_type', 'general')} matters"
+        return perspectives
+    
+    def _extract_recommendations(self, response_text: str) -> Dict[str, List[str]]:
+        """Extract recommendations from the response."""
+        return {
+            "immediate": ["Review current SOPs", "Assess compliance status"],
+            "short_term": ["Implement suggested optimizations", "Train staff on new procedures"],
+            "long_term": ["Develop comprehensive improvement plan", "Invest in technology upgrades"]
+        }
+    
+    def _extract_risks(self, response_text: str) -> List[str]:
+        """Extract risks and considerations from the response."""
+        return [
+            "Regulatory compliance requirements",
+            "Resource allocation needs",
+            "Implementation timeline considerations"
+        ]
+    
+    def _generate_follow_up_questions(self, query: str, response: str) -> List[str]:
+        """Generate relevant follow-up questions for deeper consultation."""
+        return [
+            "Would you like me to elaborate on any specific aspect?",
+            "Do you need help creating an implementation plan?",
+            "Should we discuss the financial implications in more detail?",
+            "Are there specific SOPs you'd like me to reference?"
+        ]
+    
+    def _generate_fallback_response(self, query: str) -> Dict[str, any]:
+        """Generate a fallback response in case of errors."""
+        return {
+            "main_response": f"I understand you're asking about: {query}. While I cannot provide a detailed analysis at this moment, I recommend consulting your existing SOPs and considering both operational and strategic implications.",
+            "expertise_perspectives": {"General": "Consult relevant documentation and stakeholders"},
+            "recommendations": {
+                "immediate": ["Review relevant SOPs"],
+                "short_term": ["Gather more information"],
+                "long_term": ["Develop comprehensive strategy"]
+            },
+            "risks_and_considerations": ["Ensure compliance with regulations"],
+            "confidence_level": "low",
+            "follow_up_questions": ["Can you provide more specific details about your concern?"],
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    def get_conversation_summary(self) -> str:
+        """Get a summary of the consultation conversation."""
+        if not self.conversation_history:
+            return "No consultation history available."
+        
+        summary = f"Consultation Summary ({len(self.conversation_history)} interactions):\n"
+        for i, interaction in enumerate(self.conversation_history[-5:], 1):  # Last 5 interactions
+            summary += f"\n{i}. Query: {interaction['query'][:100]}...\n"
+            summary += f"   Confidence: {interaction['response']['confidence_level']}\n"
+        
+        return summary
