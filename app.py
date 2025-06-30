@@ -19,6 +19,23 @@ st.set_page_config(page_title="Manufacturing Knowledge Assistant", page_icon="�
 # Require authentication before accessing the app
 auth_manager = require_auth()
 
+# Check if admin portal should be shown
+if hasattr(st.session_state, 'show_admin_portal') and st.session_state.show_admin_portal:
+    from user_manager import UserManager
+    
+    st.markdown("# 👤 Admin Portal")
+    
+    if st.button("🔙 Back to Main App", type="secondary"):
+        st.session_state.show_admin_portal = False
+        st.rerun()
+    
+    st.markdown("---")
+    
+    # Initialize user manager and render portal
+    user_manager = UserManager()
+    user_manager.render_admin_portal()
+    st.stop()  # Stop here, don't render the main app
+
 @st.cache_resource
 def initialize_components():
     config = Config()
@@ -483,6 +500,16 @@ def main():
                         st.session_state.mode = chat['mode']
                         st.rerun()
         
+        # Admin Portal (only show for admin users)
+        if hasattr(st.session_state, 'user_role') and st.session_state.user_role == 'admin':
+            st.divider()
+            st.header("👤 Admin Portal")
+            
+            if st.button("🔧 Manage Users", type="primary", use_container_width=True):
+                st.session_state.show_admin_portal = True
+            
+            st.caption("🔐 Administrator privileges detected")
+        
     
     # Always present floating indicator container (shows/hides with CSS)
     expert_active = 'mode' in st.session_state and st.session_state.mode == 'expert_consultant'
@@ -704,6 +731,7 @@ Answer:"""
     
     if not vector_db.has_documents():
         st.warning("⚠️ No documents found in the vector database. Click 'Check for Updates' to process your SOP documents.")
+    
 
 if __name__ == "__main__":
     main()

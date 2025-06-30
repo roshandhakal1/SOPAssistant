@@ -9,37 +9,13 @@ import hmac
 from datetime import datetime, timedelta
 import os
 from typing import Dict, Optional
+from user_manager import UserManager
 
 class AuthManager:
     """Handles user authentication and session management."""
     
     def __init__(self):
-        # Load credentials from Streamlit secrets or environment variables
-        try:
-            import streamlit as st
-            admin_user = st.secrets.get("ADMIN_USERNAME", os.getenv("ADMIN_USERNAME", "admin"))
-            admin_pass = st.secrets.get("ADMIN_PASSWORD", os.getenv("ADMIN_PASSWORD", "admin123"))
-            user_user = st.secrets.get("USER_USERNAME", os.getenv("USER_USERNAME", "user"))
-            user_pass = st.secrets.get("USER_PASSWORD", os.getenv("USER_PASSWORD", "user123"))
-        except:
-            admin_user = os.getenv("ADMIN_USERNAME", "admin")
-            admin_pass = os.getenv("ADMIN_PASSWORD", "admin123")
-            user_user = os.getenv("USER_USERNAME", "user")
-            user_pass = os.getenv("USER_PASSWORD", "user123")
-        
-        self.users = {
-            admin_user: {
-                "password_hash": self._hash_password(admin_pass),
-                "role": "admin",
-                "name": "Administrator"
-            },
-            user_user: {
-                "password_hash": self._hash_password(user_pass),
-                "role": "user", 
-                "name": "User"
-            }
-        }
-        
+        self.user_manager = UserManager()
         # Session timeout (4 hours)
         self.session_timeout = timedelta(hours=4)
     
@@ -53,16 +29,7 @@ class AuthManager:
     
     def authenticate(self, username: str, password: str) -> Optional[Dict]:
         """Authenticate user with username and password."""
-        if username in self.users:
-            user_data = self.users[username]
-            if self._verify_password(password, user_data["password_hash"]):
-                return {
-                    "username": username,
-                    "role": user_data["role"],
-                    "name": user_data["name"],
-                    "login_time": datetime.now()
-                }
-        return None
+        return self.user_manager.authenticate(username, password)
     
     def is_session_valid(self) -> bool:
         """Check if current session is valid."""
@@ -86,11 +53,12 @@ class AuthManager:
         st.session_state.username = user_data["username"]
         st.session_state.user_role = user_data["role"]
         st.session_state.user_name = user_data["name"]
+        st.session_state.user_email = user_data.get("email", "")
         st.session_state.login_time = user_data["login_time"]
     
     def logout(self) -> None:
         """Log out user and clear session data."""
-        for key in ["authenticated", "username", "user_role", "user_name", "login_time"]:
+        for key in ["authenticated", "username", "user_role", "user_name", "user_email", "login_time"]:
             if key in st.session_state:
                 del st.session_state[key]
     
