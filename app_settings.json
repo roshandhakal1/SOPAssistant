@@ -1,0 +1,4 @@
+{
+  "default_model": "gemini-1.5-pro",
+  "expert_model": "gemini-1.5-pro"
+}

@@ -6,17 +6,10 @@ load_dotenv()
 
 class Config:
     def __init__(self):
-        # Use Streamlit secrets if available, otherwise fall back to environment variables
-        try:
-            import streamlit as st
-            self.SOP_FOLDER = st.secrets.get("SOP_FOLDER", os.getenv("SOP_FOLDER", "/Users/roshandhakal/Desktop/AD/SOPs"))
-            self.GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
-            self.CHROMA_PERSIST_DIR = st.secrets.get("CHROMA_PERSIST_DIR", os.getenv("CHROMA_PERSIST_DIR", "./chroma_db"))
-        except:
-            # Fallback if not running in Streamlit
-            self.SOP_FOLDER = os.getenv("SOP_FOLDER", "/Users/roshandhakal/Desktop/AD/SOPs")
-            self.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-            self.CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
+        # Just use environment variables from .env file
+        self.SOP_FOLDER = os.getenv("SOP_FOLDER", "/Users/roshandhakal/Desktop/AD/SOPs")
+        self.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+        self.CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
         
         self.CHUNK_SIZE = 1000
         self.CHUNK_OVERLAP = 200
@@ -25,7 +18,8 @@ class Config:
         
         self.TOP_K_RESULTS = 5
         
-        # Expert Mode Configuration
+        # Model Configuration (can be overridden by user settings)
+        self.DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gemini-1.5-flash")
         self.EXPERT_MODEL = os.getenv("EXPERT_MODEL", "gemini-1.5-pro")
         self.EXPERT_CONFIDENCE_THRESHOLD = float(os.getenv("EXPERT_CONFIDENCE_THRESHOLD", "0.7"))
         self.EXPERT_MAX_CONTEXT_LENGTH = int(os.getenv("EXPERT_MAX_CONTEXT_LENGTH", "5"))

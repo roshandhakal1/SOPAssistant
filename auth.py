@@ -66,8 +66,8 @@ class AuthManager:
         """Render login page and handle authentication."""
         st.markdown("""
         <div style="text-align: center; padding: 2rem 0;">
-            <h1 style="color: #1d1d1f; font-size: 3rem; margin-bottom: 0.5rem;">🏭 SOP Assistant</h1>
-            <p style="color: #86868b; font-size: 1.2rem; margin-bottom: 2rem;">Secure Manufacturing Intelligence Platform</p>
+            <h1 style="color: #1d1d1f; font-size: 3rem; margin-bottom: 0.5rem; font-weight: 600;">SOP Assistant</h1>
+            <p style="color: #86868b; font-size: 1.2rem; margin-bottom: 2rem;">Manufacturing Intelligence Platform</p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -75,20 +75,13 @@ class AuthManager:
         col1, col2, col3 = st.columns([1, 1, 1])
         
         with col2:
-            st.markdown("### 🔐 Sign In")
+            st.markdown("### Sign In")
             
             with st.form("login_form"):
                 username = st.text_input("Username", placeholder="Enter your username")
                 password = st.text_input("Password", type="password", placeholder="Enter your password")
                 
-                col_login, col_help = st.columns([1, 1])
-                
-                with col_login:
-                    login_button = st.form_submit_button("Sign In", type="primary", use_container_width=True)
-                
-                with col_help:
-                    if st.form_submit_button("Show Demo Credentials", use_container_width=True):
-                        st.info("**Demo Credentials:**\n\n**Admin:** admin / admin123\n\n**User:** user / user123")
+                login_button = st.form_submit_button("Sign In", type="primary", use_container_width=True)
             
             if login_button:
                 if username and password:
@@ -105,32 +98,29 @@ class AuthManager:
         # Footer
         st.markdown("""
         <div style="text-align: center; margin-top: 3rem; padding: 1rem; color: #86868b;">
-            <p>🔒 Secure access to your manufacturing knowledge base</p>
+            <p>Secure access to your manufacturing knowledge base</p>
         </div>
         """, unsafe_allow_html=True)
         
         return False
     
     def render_user_info(self) -> None:
-        """Render user info in sidebar."""
+        """Render user info in main header area."""
         if self.is_session_valid():
-            st.sidebar.markdown("---")
-            st.sidebar.markdown("### 👤 User Session")
-            st.sidebar.markdown(f"**Name:** {st.session_state.user_name}")
-            st.sidebar.markdown(f"**Role:** {st.session_state.user_role.title()}")
+            # Add user info and sign out to the top right of main area
+            col1, col2, col3 = st.columns([4, 1.5, 0.5])
             
-            # Session time remaining
-            time_elapsed = datetime.now() - st.session_state.login_time
-            time_remaining = self.session_timeout - time_elapsed
-            hours_remaining = int(time_remaining.total_seconds() // 3600)
-            minutes_remaining = int((time_remaining.total_seconds() % 3600) // 60)
+            with col2:
+                st.markdown(f"""
+                <div style="text-align: right; padding: 0.5rem 0; color: #6e6e73; font-size: 0.875rem;">
+                    👤 {st.session_state.user_name} <span style="color: #86868b;">({st.session_state.user_role})</span>
+                </div>
+                """, unsafe_allow_html=True)
             
-            if time_remaining.total_seconds() > 0:
-                st.sidebar.caption(f"⏱️ Session: {hours_remaining}h {minutes_remaining}m remaining")
-            
-            if st.sidebar.button("🚪 Sign Out", type="secondary", use_container_width=True):
-                self.logout()
-                st.rerun()
+            with col3:
+                if st.button("Sign Out", type="secondary", help="Sign out of your account", key="header_signout", use_container_width=True):
+                    self.logout()
+                    st.rerun()
 
 def require_auth():
     """Decorator function to require authentication for app access."""
@@ -140,6 +130,5 @@ def require_auth():
         auth_manager.render_login_page()
         st.stop()
     else:
-        # Add user info to sidebar
-        auth_manager.render_user_info()
+        # Don't render user info here - it will be called from main()
         return auth_manager

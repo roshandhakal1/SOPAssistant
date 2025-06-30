@@ -13,6 +13,7 @@ from config import Config
 from expert_consultant import ManufacturingExpertConsultant
 from session_document_handler import SessionDocumentHandler
 from auth import require_auth
+from chat_history_manager import ChatHistoryManager
 
 st.set_page_config(page_title="Manufacturing Knowledge Assistant", page_icon="🏭", layout="wide")
 
@@ -36,16 +37,31 @@ if hasattr(st.session_state, 'show_admin_portal') and st.session_state.show_admi
     user_manager.render_admin_portal()
     st.stop()  # Stop here, don't render the main app
 
-@st.cache_resource
+@st.cache_resource(ttl=3600)  # 1 hour cache
 def initialize_components():
     config = Config()
     doc_processor = DocumentProcessor()
     embeddings_manager = EmbeddingsManager(config.GEMINI_API_KEY)
     vector_db = VectorDatabase(config.CHROMA_PERSIST_DIR)
-    rag_handler = RAGHandler(config.GEMINI_API_KEY, vector_db)
-    expert_consultant = ManufacturingExpertConsultant(config.GEMINI_API_KEY)
     session_doc_handler = SessionDocumentHandler(embeddings_manager)
-    return config, doc_processor, embeddings_manager, vector_db, rag_handler, expert_consultant, session_doc_handler
+    chat_history_manager = ChatHistoryManager()
+    return config, doc_processor, embeddings_manager, vector_db, session_doc_handler, chat_history_manager
+
+def get_model_components(config, vector_db):
+    """Get model-specific components based on user settings."""
+    from user_manager import UserManager
+    user_manager = UserManager()
+    
+    # Get current user's model preferences
+    username = st.session_state.get('username', 'unknown')
+    standard_model = user_manager.get_user_model(username, mode="standard")
+    expert_model = user_manager.get_user_model(username, mode="expert")
+    
+    # Create model-specific handlers
+    rag_handler = RAGHandler(config.GEMINI_API_KEY, vector_db, model_name=standard_model)
+    expert_consultant = ManufacturingExpertConsultant(config.GEMINI_API_KEY, model_name=expert_model)
+    
+    return rag_handler, expert_consultant, standard_model, expert_model
 
 def get_file_hash(file_path):
     with open(file_path, 'rb') as f:
@@ -130,10 +146,60 @@ def process_updates(updates, removed_files, new_index, doc_processor, embeddings
     status_text.empty()
 
 def main():
+    # Import auth manager and render user info in header area
+    from auth import AuthManager
+    auth_manager = AuthManager()
+    
+    if auth_manager.is_session_valid():
+        auth_manager.render_user_info()
+    
     # Apple-inspired minimal luxury header
     st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@300;400;500;600;700&display=swap');
+    
+    /* SOP document reference styling */
+    .sop-reference {
+        color: #0066cc;
+        background-color: rgba(0, 102, 204, 0.05);
+        padding: 4px 12px;
+        border-radius: 16px;
+        font-size: 0.875rem;
+        font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+        display: inline-block;
+        margin: 2px 0;
+        border: 1px solid rgba(0, 102, 204, 0.1);
+        transition: all 0.2s ease;
+    }
+    
+    .sop-reference:hover {
+        background-color: rgba(0, 102, 204, 0.1);
+        border-color: rgba(0, 102, 204, 0.2);
+    }
+    
+    .uploaded-doc-reference {
+        color: #34c759;
+        background-color: rgba(52, 199, 89, 0.05);
+        padding: 4px 12px;
+        border-radius: 16px;
+        font-size: 0.875rem;
+        font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+        display: inline-block;
+        margin: 2px 0;
+        border: 1px solid rgba(52, 199, 89, 0.1);
+    }
+    
+    /* Inline SOP references in response text */
+    .sop-reference-inline {
+        color: #0066cc;
+        background-color: rgba(0, 102, 204, 0.05);
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.875rem;
+        font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+        border: 1px solid rgba(0, 102, 204, 0.08);
+        white-space: nowrap;
+    }
     
     .main-header {
         text-align: center;
@@ -342,6 +408,7 @@ def main():
     </div>
     """, unsafe_allow_html=True)
     
+    
     # Initialize session state for mode
     if 'mode' not in st.session_state:
         st.session_state.mode = 'standard'
@@ -351,7 +418,10 @@ def main():
         with st.spinner("Initializing components..."):
             components = initialize_components()
             st.session_state.components = components
-            config, doc_processor, embeddings_manager, vector_db, rag_handler, expert_consultant, session_doc_handler = components
+            config, doc_processor, embeddings_manager, vector_db, session_doc_handler, chat_history_manager = components
+            
+            # Get model-specific components
+            rag_handler, expert_consultant, standard_model, expert_model = get_model_components(config, vector_db)
             
             # Check if this is first run (no documents in DB)
             if not vector_db.has_documents():
@@ -367,11 +437,14 @@ def main():
     else:
         # Use cached components if available
         if 'components' in st.session_state:
-            config, doc_processor, embeddings_manager, vector_db, rag_handler, expert_consultant, session_doc_handler = st.session_state.components
+            config, doc_processor, embeddings_manager, vector_db, session_doc_handler, chat_history_manager = st.session_state.components
         else:
             components = initialize_components()
             st.session_state.components = components
-            config, doc_processor, embeddings_manager, vector_db, rag_handler, expert_consultant, session_doc_handler = components
+            config, doc_processor, embeddings_manager, vector_db, session_doc_handler, chat_history_manager = components
+        
+        # Get model-specific components based on user settings
+        rag_handler, expert_consultant, standard_model, expert_model = get_model_components(config, vector_db)
     
     with st.sidebar:
         st.header("⚙️ Assistant Mode")
@@ -452,19 +525,14 @@ def main():
         
         with col2:
             if st.button("📥 New Chat", type="secondary", use_container_width=True):
-                # Save current chat to history if it has messages
+                # Save current chat to persistent history if it has messages
                 if 'messages' in st.session_state and st.session_state.messages:
-                    if 'chat_history' not in st.session_state:
-                        st.session_state.chat_history = []
-                    
-                    # Create chat summary
-                    chat_summary = {
-                        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    username = st.session_state.get('username', 'unknown')
+                    chat_data = {
                         'messages': st.session_state.messages.copy(),
-                        'mode': st.session_state.get('mode', 'standard'),
-                        'preview': st.session_state.messages[0]['content'][:50] + "..." if st.session_state.messages else "Empty chat"
+                        'mode': st.session_state.get('mode', 'standard')
                     }
-                    st.session_state.chat_history.append(chat_summary)
+                    chat_history_manager.save_chat(username, chat_data)
                 
                 # Clear current messages
                 st.session_state.messages = []
@@ -487,18 +555,39 @@ def main():
                     mime="application/json"
                 )
         
-        # Show chat history if available
-        if 'chat_history' in st.session_state and st.session_state.chat_history:
-            st.divider()
-            st.subheader("📚 Recent Chats")
+        # Show persistent chat history
+        if hasattr(st.session_state, 'username'):
+            username = st.session_state.username
+            recent_chats = chat_history_manager.get_recent_chats(username, limit=5)
             
-            # Show last 5 chats
-            for i, chat in enumerate(reversed(st.session_state.chat_history[-5:])):
-                with st.expander(f"{chat['timestamp']} - {chat['preview']}", expanded=False):
-                    if st.button(f"Load Chat", key=f"load_chat_{i}"):
-                        st.session_state.messages = chat['messages']
-                        st.session_state.mode = chat['mode']
-                        st.rerun()
+            if recent_chats:
+                st.divider()
+                st.subheader("📚 Chat History")
+                
+                for i, chat in enumerate(recent_chats):
+                    chat_title = chat.get('title', 'Untitled Chat')
+                    chat_date = chat.get('timestamp', '')[:16].replace('T', ' ')
+                    mode_icon = "🤖" if chat.get('mode') == 'expert_consultant' else "📖"
+                    
+                    with st.expander(f"{mode_icon} {chat_date} - {chat_title}", expanded=False):
+                        col_load, col_delete = st.columns([3, 1])
+                        
+                        with col_load:
+                            if st.button("📂 Load Chat", key=f"load_chat_{i}"):
+                                st.session_state.messages = chat['messages']
+                                st.session_state.mode = chat['mode']
+                                st.rerun()
+                        
+                        with col_delete:
+                            if st.button("🗑️", key=f"delete_chat_{i}", help="Delete this chat"):
+                                chat_history_manager.delete_chat(username, chat['id'])
+                                st.rerun()
+                
+                # Clear all history option
+                if st.button("🗑️ Clear All History", type="secondary", help="Delete all your chat history"):
+                    chat_history_manager.clear_all_chats(username)
+                    st.success("Chat history cleared!")
+                    st.rerun()
         
         # Admin Portal (only show for admin users)
         if hasattr(st.session_state, 'user_role') and st.session_state.user_role == 'admin':
@@ -511,23 +600,18 @@ def main():
             st.caption("🔐 Administrator privileges detected")
         
     
-    # Always present floating indicator container (shows/hides with CSS)
-    expert_active = 'mode' in st.session_state and st.session_state.mode == 'expert_consultant'
-    indicator_style = 'opacity: 1; transform: translateX(0) scale(1);' if expert_active else 'opacity: 0; transform: translateX(100px) scale(0.8); pointer-events: none;'
-    
-    st.markdown(f"""
-    <div class="expert-floating-indicator" style="{indicator_style}">
-        <div class="expert-floating-dot"></div>
-        Expert Active
-    </div>
-    """, unsafe_allow_html=True)
     
     if "messages" not in st.session_state:
         st.session_state.messages = []
     
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            # Check if message contains HTML and render accordingly
+            content = message["content"]
+            if '<span class="sop-reference-inline">' in content:
+                st.markdown(content, unsafe_allow_html=True)
+            else:
+                st.markdown(content)
     
     # Document Upload Section
     with st.expander("📎 Upload Reference Documents", expanded=False):
@@ -619,23 +703,31 @@ Instructions:
 
 Answer:"""
                             
-                            enhanced_response = rag_handler.model.generate_content(enhanced_prompt)
+                            # Configure generation for maximum output
+                            generation_config = {
+                                "max_output_tokens": 8192,
+                                "temperature": 0.1,
+                                "top_p": 0.8,
+                                "top_k": 40
+                            }
+                            
+                            enhanced_response = rag_handler.model.generate_content(enhanced_prompt, generation_config=generation_config)
                             response = enhanced_response.text
                             session_sources = [meta['filename'] for meta in session_metas]
                     
-                    st.markdown(response)
+                    st.markdown(response, unsafe_allow_html=True)
                     
                     # Show sources
                     if sop_sources or session_sources:
-                        st.divider()
+                        st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
                         if session_sources:
-                            st.caption("📎 Referenced Uploaded Documents:")
+                            st.markdown("##### 📎 Referenced Uploaded Documents")
                             for source in session_sources:
-                                st.caption(f"• {source}")
+                                st.markdown(f'<span class="uploaded-doc-reference">{source}</span>', unsafe_allow_html=True)
                         if sop_sources:
-                            st.caption("📎 Referenced SOPs:")
-                            for source in sop_sources:
-                                st.caption(f"• {source}")
+                            st.markdown("##### 📎 Referenced SOPs")
+                            sop_html = " ".join([f'<span class="sop-reference">{source}</span>' for source in sop_sources])
+                            st.markdown(sop_html, unsafe_allow_html=True)
             
             else:  # Expert Consultant mode
                 with st.spinner("🏭 Manufacturing expert analyzing..."):
@@ -670,7 +762,7 @@ Answer:"""
                     
                     # Display expert response with structured format
                     st.markdown("#### 🏭 Manufacturing Expert Analysis")
-                    st.markdown(expert_response['main_response'])
+                    st.markdown(expert_response['main_response'], unsafe_allow_html=True)
                     
                     # Show expertise perspectives
                     if expert_response.get('expertise_perspectives'):
@@ -708,22 +800,22 @@ Answer:"""
                     
                     # Show follow-up questions
                     if expert_response.get('follow_up_questions'):
-                        st.divider()
+                        st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
                         st.markdown("**💭 Follow-up questions to consider:**")
                         for q in expert_response['follow_up_questions']:
                             st.markdown(f"• {q}")
                     
                     # Show all referenced sources
                     if sop_sources or session_sources:
-                        st.divider()
+                        st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
                         if session_sources:
-                            st.caption("📎 Referenced Uploaded Documents:")
+                            st.markdown("##### 📎 Referenced Uploaded Documents")
                             for source in session_sources:
-                                st.caption(f"• {source}")
+                                st.markdown(f'<span class="uploaded-doc-reference">{source}</span>', unsafe_allow_html=True)
                         if sop_sources:
-                            st.caption("📎 Referenced SOPs:")
-                            for source in sop_sources:
-                                st.caption(f"• {source}")
+                            st.markdown("##### 📎 Referenced SOPs")
+                            sop_html = " ".join([f'<span class="sop-reference">{source}</span>' for source in sop_sources])
+                            st.markdown(sop_html, unsafe_allow_html=True)
                     
                     response = expert_response['main_response']
         

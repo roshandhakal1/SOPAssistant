@@ -14,9 +14,19 @@ from pathlib import Path
 class UserManager:
     """Handles user management for admin users."""
     
-    def __init__(self, users_file: str = "users.json"):
+    def __init__(self, users_file: str = "users.json", settings_file: str = "app_settings.json"):
         self.users_file = users_file
+        self.settings_file = settings_file
         self.users = self._load_users()
+        self.settings = self._load_settings()
+        
+        # Available Gemini models
+        self.available_models = {
+            "gemini-1.5-flash": "Gemini 1.5 Flash (Fast, Cost-effective)",
+            "gemini-1.5-pro": "Gemini 1.5 Pro (Most capable, Higher cost)",
+            "gemini-1.0-pro": "Gemini 1.0 Pro (Stable, Balanced)",
+            "default": "System Default (Uses config.py setting)"
+        }
     
     def _load_users(self) -> Dict:
         """Load users from JSON file or create default users."""
@@ -59,7 +69,32 @@ class UserManager:
             st.error(f"Failed to save users: {e}")
             return False
     
-    def add_user(self, username: str, password: str, name: str, email: str, role: str = "user") -> bool:
+    def _load_settings(self) -> Dict:
+        """Load application settings."""
+        if os.path.exists(self.settings_file):
+            try:
+                with open(self.settings_file, 'r') as f:
+                    return json.load(f)
+            except:
+                pass
+        
+        # Default settings
+        return {
+            "default_model": "gemini-1.5-flash",
+            "expert_model": "gemini-1.5-pro"
+        }
+    
+    def _save_settings(self):
+        """Save application settings."""
+        try:
+            with open(self.settings_file, 'w') as f:
+                json.dump(self.settings, f, indent=2)
+            return True
+        except Exception as e:
+            st.error(f"Failed to save settings: {e}")
+            return False
+    
+    def add_user(self, username: str, password: str, name: str, email: str, role: str = "user", model: str = "default") -> bool:
         """Add a new user."""
         if username in self.users:
             return False
@@ -69,6 +104,7 @@ class UserManager:
             "role": role,
             "name": name,
             "email": email,
+            "model": model,
             "created_at": datetime.now().isoformat(),
             "last_login": None,
             "active": True
@@ -82,7 +118,7 @@ class UserManager:
             return False
         
         for key, value in kwargs.items():
-            if key in ["password", "role", "name", "email", "active"]:
+            if key in ["password", "role", "name", "email", "active", "model"]:
                 self.users[username][key] = value
         
         self.users[username]["updated_at"] = datetime.now().isoformat()
@@ -122,6 +158,20 @@ class UserManager:
                 }
         return None
     
+    def get_user_model(self, username: str, mode: str = "standard") -> str:
+        """Get the effective model for a user."""
+        user = self.users.get(username, {})
+        user_model = user.get('model', 'default')
+        
+        if user_model == 'default':
+            # Use global defaults
+            if mode == "expert":
+                return self.settings.get("expert_model", "gemini-1.5-pro")
+            else:
+                return self.settings.get("default_model", "gemini-1.5-flash")
+        else:
+            return user_model
+    
     def render_admin_portal(self):
         """Render the admin user management portal."""
         if not hasattr(st.session_state, 'user_role') or st.session_state.user_role != 'admin':
@@ -131,7 +181,7 @@ class UserManager:
         st.markdown("## 👥 User Management Portal")
         
         # Tabs for different admin functions
-        tab1, tab2, tab3 = st.tabs(["📋 All Users", "➕ Add User", "⚙️ User Settings"])
+        tab1, tab2, tab3, tab4 = st.tabs(["📋 All Users", "➕ Add User", "⚙️ User Settings", "🤖 Model Settings"])
         
         with tab1:
             self._render_users_list()
@@ -141,6 +191,9 @@ class UserManager:
         
         with tab3:
             self._render_user_settings()
+        
+        with tab4:
+            self._render_model_settings()
     
     def _render_users_list(self):
         """Render list of all users."""
@@ -159,6 +212,9 @@ class UserManager:
                     st.write(f"**Role:** {user_data['role'].title()}")
                     st.write(f"**Email:** {user_data.get('email', 'N/A')}")
                     st.write(f"**Status:** {'🟢 Active' if user_data.get('active', True) else '🔴 Inactive'}")
+                    model = user_data.get('model', 'default')
+                    model_display = self.available_models.get(model, model).split(' (')[0]
+                    st.write(f"**AI Model:** {model_display}")
                 
                 with col2:
                     st.write(f"**Created:** {user_data.get('created_at', 'N/A')[:10]}")
@@ -202,13 +258,21 @@ class UserManager:
                         new_email = st.text_input("Email", value=user_data.get('email', ''))
                         new_role = st.selectbox("Role", ["user", "admin"], 
                                               index=0 if user_data['role'] == 'user' else 1)
+                        
+                        current_model = user_data.get('model', 'default')
+                        model_options = list(self.available_models.keys())
+                        model_index = model_options.index(current_model) if current_model in model_options else 0
+                        new_model = st.selectbox("AI Model", options=model_options,
+                                               format_func=lambda x: self.available_models[x],
+                                               index=model_index)
+                        
                         new_password = st.text_input("New Password (leave blank to keep current)", 
                                                    type="password")
                         
                         col_save, col_cancel = st.columns(2)
                         with col_save:
                             if st.form_submit_button("💾 Save Changes", type="primary"):
-                                updates = {"name": new_name, "email": new_email, "role": new_role}
+                                updates = {"name": new_name, "email": new_email, "role": new_role, "model": new_model}
                                 if new_password:
                                     updates["password"] = new_password
                                 
@@ -239,6 +303,9 @@ class UserManager:
             with col2:
                 email = st.text_input("Email", placeholder="user@company.com")
                 role = st.selectbox("Role", ["user", "admin"])
+                model = st.selectbox("AI Model", options=list(self.available_models.keys()),
+                                   format_func=lambda x: self.available_models[x],
+                                   index=list(self.available_models.keys()).index("default"))
                 confirm_password = st.text_input("Confirm Password*", type="password", 
                                                placeholder="Confirm password")
             
@@ -253,7 +320,7 @@ class UserManager:
                 elif len(password) < 6:
                     st.error("⚠️ Password must be at least 6 characters!")
                 else:
-                    if self.add_user(username, password, name, email, role):
+                    if self.add_user(username, password, name, email, role, model):
                         st.success(f"✅ User '{username}' added successfully!")
                         st.balloons()
                     else:
@@ -308,3 +375,102 @@ class UserManager:
                             st.error("Failed to import users!")
                 except Exception as e:
                     st.error(f"Invalid JSON file: {e}")
+    
+    def _render_model_settings(self):
+        """Render AI model settings."""
+        st.markdown("### 🤖 AI Model Configuration")
+        
+        # Global model settings
+        st.markdown("#### Global Default Models")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("##### Standard Mode (Knowledge Search)")
+            current_default = self.settings.get("default_model", "gemini-1.5-flash")
+            default_model = st.selectbox(
+                "Default Model for Knowledge Search",
+                options=list(self.available_models.keys())[:-1],  # Exclude "default" option
+                format_func=lambda x: self.available_models[x],
+                index=list(self.available_models.keys())[:-1].index(current_default) if current_default in self.available_models else 0,
+                key="default_model_select"
+            )
+            
+            if st.button("💾 Save Default Model", key="save_default_model"):
+                self.settings["default_model"] = default_model
+                if self._save_settings():
+                    st.success("Default model updated!")
+                    st.rerun()
+        
+        with col2:
+            st.markdown("##### Expert Consultant Mode")
+            current_expert = self.settings.get("expert_model", "gemini-1.5-pro")
+            expert_model = st.selectbox(
+                "Model for Expert Consultation",
+                options=list(self.available_models.keys())[:-1],  # Exclude "default" option
+                format_func=lambda x: self.available_models[x],
+                index=list(self.available_models.keys())[:-1].index(current_expert) if current_expert in self.available_models else 1,
+                key="expert_model_select"
+            )
+            
+            if st.button("💾 Save Expert Model", key="save_expert_model"):
+                self.settings["expert_model"] = expert_model
+                if self._save_settings():
+                    st.success("Expert model updated!")
+                    st.rerun()
+        
+        st.markdown("---")
+        
+        # Model information
+        st.markdown("#### 📊 Model Comparison")
+        
+        model_info = {
+            "gemini-1.5-flash": {
+                "Speed": "⚡⚡⚡⚡⚡ Very Fast",
+                "Cost": "💰 Low",
+                "Context Window": "1M tokens",
+                "Best For": "Quick searches, simple queries",
+                "Features": "Multimodal, efficient"
+            },
+            "gemini-1.5-pro": {
+                "Speed": "⚡⚡⚡ Moderate",
+                "Cost": "💰💰💰 Higher",
+                "Context Window": "2M tokens",
+                "Best For": "Complex analysis, expert consultation",
+                "Features": "Most capable, best reasoning"
+            },
+            "gemini-1.0-pro": {
+                "Speed": "⚡⚡⚡⚡ Fast",
+                "Cost": "💰💰 Moderate",
+                "Context Window": "32K tokens",
+                "Best For": "Balanced performance",
+                "Features": "Stable, reliable"
+            }
+        }
+        
+        for model, info in model_info.items():
+            with st.expander(f"📋 {self.available_models[model]}", expanded=False):
+                for key, value in info.items():
+                    st.write(f"**{key}:** {value}")
+        
+        st.markdown("---")
+        
+        # User model preferences overview
+        st.markdown("#### 👥 User Model Preferences")
+        
+        users_by_model = {}
+        for username, user_data in self.users.items():
+            model = user_data.get('model', 'default')
+            if model not in users_by_model:
+                users_by_model[model] = []
+            users_by_model[model].append(username)
+        
+        for model, users in users_by_model.items():
+            model_display = self.available_models.get(model, model)
+            st.write(f"**{model_display}**: {', '.join(users)} ({len(users)} users)")
+        
+        # Current session info
+        if hasattr(st.session_state, 'username'):
+            current_user = self.users.get(st.session_state.username, {})
+            user_model = current_user.get('model', 'default')
+            st.info(f"💡 You are currently using: **{self.available_models.get(user_model, user_model)}**")

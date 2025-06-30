@@ -21,6 +21,7 @@ class ManufacturingExpertConsultant:
         """Initialize the expert consultant with Gemini API."""
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel(model_name)
+        self.model_name = model_name
         self.conversation_history = []
         self.expertise_areas = {
             "CEO": "Strategic planning, business growth, innovation, market positioning",
@@ -53,7 +54,15 @@ class ManufacturingExpertConsultant:
         """
         
         try:
-            response = self.model.generate_content(analysis_prompt)
+            # Configure generation for maximum output
+            generation_config = {
+                "max_output_tokens": 8192,  # Maximum allowed for Gemini
+                "temperature": 0.1,
+                "top_p": 0.8,
+                "top_k": 40
+            }
+            
+            response = self.model.generate_content(analysis_prompt, generation_config=generation_config)
             # Parse the response to extract structured information
             analysis = self._parse_analysis_response(response.text)
             return analysis
@@ -74,11 +83,41 @@ class ManufacturingExpertConsultant:
         expertise_prompt = self._build_expertise_prompt(query, context, analysis)
         
         try:
-            response = self.model.generate_content(expertise_prompt)
+            # Configure generation for maximum output
+            generation_config = {
+                "max_output_tokens": 8192,  # Maximum allowed for Gemini
+                "temperature": 0.2,  # Slightly higher for creativity in expert mode
+                "top_p": 0.9,
+                "top_k": 40
+            }
+            
+            response = self.model.generate_content(expertise_prompt, generation_config=generation_config)
+            
+            # Format SOP names in the response
+            import re
+            formatted_response = response.text
+            
+            # More precise pattern to match SOP filenames (including revision numbers and special characters)
+            sop_pattern = r'\b([A-Za-z0-9\-\_\(\)\s]+(?:Rev\d+(?:Draft\d+)?)?[A-Za-z0-9\-\_\(\)\s]*\.(doc|docx|pdf))\b'
+            
+            def format_sop(match):
+                sop_name = match.group(1)
+                # Clean up any existing HTML tags
+                clean_name = re.sub(r'<[^>]+>', '', sop_name)
+                return f'<span class="sop-reference-inline">{clean_name}</span>'
+            
+            # Replace SOP names with formatted versions, but avoid double-formatting
+            if '<span class="sop-reference-inline">' not in formatted_response:
+                formatted_response = re.sub(sop_pattern, format_sop, formatted_response)
+            else:
+                # If already formatted, just clean any malformed HTML
+                formatted_response = re.sub(r'<span class="sop-reference-inline">([^<]+)</span>', 
+                                          lambda m: f'<span class="sop-reference-inline">{re.sub(r"<[^>]+>", "", m.group(1))}</span>', 
+                                          formatted_response)
             
             # Structure the expert response
             expert_response = {
-                "main_response": response.text,
+                "main_response": formatted_response,
                 "expertise_perspectives": self._extract_perspectives(response.text, analysis),
                 "recommendations": self._extract_recommendations(response.text),
                 "risks_and_considerations": self._extract_risks(response.text),

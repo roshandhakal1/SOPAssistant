@@ -5,13 +5,14 @@ from abbreviation_mapper import AbbreviationMapper
 import numpy as np
 
 class RAGHandler:
-    def __init__(self, api_key: str, vector_db):
+    def __init__(self, api_key: str, vector_db, model_name: str = 'gemini-1.5-flash'):
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-1.5-flash')
+        self.model = genai.GenerativeModel(model_name)
         self.vector_db = vector_db
         self.embeddings_manager = EmbeddingsManager(api_key)
         self.top_k = 5
         self.abbreviation_mapper = AbbreviationMapper()
+        self.model_name = model_name
     
     def query(self, question: str, top_k: int = None) -> Tuple[str, List[str]]:
         if top_k is None:
@@ -64,20 +65,48 @@ Context from SOPs:
 Question: {question}
 
 Instructions:
-1. Answer the question based ONLY on the provided SOP context
-2. Be specific and cite the relevant SOP titles when referencing information
+1. Answer the question comprehensively based on the provided SOP context
+2. Be specific and cite the relevant SOP titles when referencing information (use plain text, no HTML)
 3. If the context doesn't contain enough information to fully answer the question, say so
 4. Structure your answer clearly with bullet points or numbered lists when appropriate
-5. For questions about processes or lifecycles, list the steps in order
+5. For questions about processes or lifecycles, list ALL steps in order with detailed explanations
+6. Provide thorough, detailed responses - do not summarize or abbreviate unless asked
+7. Include all relevant details, procedures, requirements, and considerations from the SOPs
+8. Use plain text formatting only - no HTML tags or special formatting
 
 Answer:"""
         
-        response = self.model.generate_content(prompt)
+        # Configure generation with maximum output tokens
+        generation_config = {
+            "max_output_tokens": 8192,  # Maximum allowed for Gemini
+            "temperature": 0.1,
+            "top_p": 0.8,
+            "top_k": 40
+        }
+        
+        response = self.model.generate_content(prompt, generation_config=generation_config)
         answer = response.text
+        
+        # Format SOP names in the response with HTML spans
+        import re
+        # More precise pattern to match SOP filenames (including revision numbers and special characters)
+        sop_pattern = r'\b([A-Za-z0-9\-\_\(\)\s]+(?:Rev\d+(?:Draft\d+)?)?[A-Za-z0-9\-\_\(\)\s]*\.(doc|docx|pdf))\b'
+        
+        def format_sop(match):
+            sop_name = match.group(1)
+            # Clean up any existing HTML tags
+            clean_name = re.sub(r'<[^>]+>', '', sop_name)
+            return f'<span class="sop-reference-inline">{clean_name}</span>'
+        
+        # Replace SOP names with formatted versions, but avoid double-formatting
+        if '<span class="sop-reference-inline">' not in answer:
+            formatted_answer = re.sub(sop_pattern, format_sop, answer)
+        else:
+            formatted_answer = answer
         
         sources = list(set([meta['filename'] for meta in metadatas]))
         
-        return answer, sources
+        return formatted_answer, sources
     
     def _format_context(self, documents: List[str], metadatas: List[Dict]) -> str:
         context_parts = []
