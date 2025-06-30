@@ -12,8 +12,12 @@ from rag_handler import RAGHandler
 from config import Config
 from expert_consultant import ManufacturingExpertConsultant
 from session_document_handler import SessionDocumentHandler
+from auth import require_auth
 
 st.set_page_config(page_title="Manufacturing Knowledge Assistant", page_icon="🏭", layout="wide")
+
+# Require authentication before accessing the app
+auth_manager = require_auth()
 
 @st.cache_resource
 def initialize_components():

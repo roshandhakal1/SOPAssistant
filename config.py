@@ -6,11 +6,17 @@ load_dotenv()
 
 class Config:
     def __init__(self):
-        self.SOP_FOLDER = os.getenv("SOP_FOLDER", "/Users/roshandhakal/Desktop/AD/SOPs")
-        
-        self.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-        
-        self.CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
+        # Use Streamlit secrets if available, otherwise fall back to environment variables
+        try:
+            import streamlit as st
+            self.SOP_FOLDER = st.secrets.get("SOP_FOLDER", os.getenv("SOP_FOLDER", "/Users/roshandhakal/Desktop/AD/SOPs"))
+            self.GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
+            self.CHROMA_PERSIST_DIR = st.secrets.get("CHROMA_PERSIST_DIR", os.getenv("CHROMA_PERSIST_DIR", "./chroma_db"))
+        except:
+            # Fallback if not running in Streamlit
+            self.SOP_FOLDER = os.getenv("SOP_FOLDER", "/Users/roshandhakal/Desktop/AD/SOPs")
+            self.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+            self.CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
         
         self.CHUNK_SIZE = 1000
         self.CHUNK_OVERLAP = 200
