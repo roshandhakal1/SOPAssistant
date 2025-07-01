@@ -185,6 +185,14 @@ class UserManager:
         st.markdown("### 🔗 Google Drive Integration")
         st.info("Connect Google Drive to sync documents. Fetches ALL documents at once (no pagination limits).")
         
+        # Check for interrupted sync on load
+        if 'sync_state' not in st.session_state:
+            saved_state = self._load_sync_state()
+            if saved_state and saved_state.get('status') == 'in_progress':
+                saved_state['status'] = 'interrupted'
+                st.session_state.sync_state = saved_state
+                self._save_sync_state()
+        
         # Check connection status
         connected = (
             'gdrive_credentials' in st.session_state or 
@@ -252,19 +260,49 @@ class UserManager:
                             
                             st.info(f"📄 **{len(documents)} documents** found in {selected_folder_name}")
                             
+                            # Check if resuming from interrupted sync
+                            resume_sync = False
+                            if 'sync_state' in st.session_state and st.session_state.sync_state.get('folder_id') == folder_id:
+                                if st.session_state.sync_state.get('status') == 'interrupted':
+                                    completed = st.session_state.sync_state.get('completed_count', 0)
+                                    total = st.session_state.sync_state.get('total_count', len(documents))
+                                    st.warning(f"⚠️ Previous sync was interrupted ({completed}/{total} completed)")
+                                    resume_sync = st.button("🔄 Resume Sync", type="primary")
+                            
                             # Sync button
-                            if st.button("🚀 Sync Documents to Knowledge Base", type="primary", 
+                            if resume_sync or st.button("🚀 Sync Documents to Knowledge Base", type="primary", 
                                        disabled=len(documents) == 0):
-                                # Progress tracking
+                                # Initialize or restore sync state
+                                if not resume_sync:
+                                    st.session_state.sync_state = {
+                                        'folder_id': folder_id,
+                                        'folder_name': selected_folder_name,
+                                        'total_count': len(documents),
+                                        'completed_count': 0,
+                                        'failed_files': [],
+                                        'downloaded_files': [],
+                                        'status': 'in_progress',
+                                        'start_time': datetime.now().isoformat()
+                                    }
+                                    # Save to file for recovery
+                                    self._save_sync_state()
+                                
+                                # Progress tracking with error handling
                                 progress_container = st.container()
                                 
-                                with progress_container:
+                                try:
+                                    with progress_container:
                                     progress_bar = st.progress(0)
                                     status_text = st.empty()
+                                    
+                                    # Keep session alive with heartbeat
+                                    placeholder = st.empty()
+                                    heartbeat_container = st.empty()
                                     
                                     # Step 1: Clear existing documents
                                     status_text.text("🗑️ Clearing existing documents...")
                                     progress_bar.progress(0.1)
+                                    placeholder.text("")  # Keep alive
                                     
                                     if Path(config.SOP_FOLDER).exists():
                                         shutil.rmtree(config.SOP_FOLDER)
@@ -274,17 +312,56 @@ class UserManager:
                                     status_text.text(f"📥 Downloading {len(documents)} documents...")
                                     progress_bar.progress(0.2)
                                     
-                                    downloaded_files = []
-                                    for i, doc in enumerate(documents):
-                                        # Update progress
-                                        progress = 0.2 + (0.5 * (i + 1) / len(documents))
-                                        progress_bar.progress(progress)
-                                        status_text.text(f"📥 Downloading {i+1}/{len(documents)}: {doc['name'][:50]}...")
+                                    # Restore state if resuming
+                                    sync_state = st.session_state.sync_state
+                                    downloaded_files = sync_state.get('downloaded_files', [])
+                                    failed_downloads = sync_state.get('failed_files', [])
+                                    start_from = sync_state.get('completed_count', 0)
+                                    
+                                    # Process in batches to prevent timeout
+                                    batch_size = 25  # Smaller batches for better resilience
+                                    for batch_start in range(start_from, len(documents), batch_size):
+                                        batch_end = min(batch_start + batch_size, len(documents))
+                                        batch_docs = documents[batch_start:batch_end]
                                         
-                                        # Download file
-                                        file_info = gdrive.download_file(doc['id'], doc['name'], config.SOP_FOLDER)
-                                        if file_info:
-                                            downloaded_files.append(file_info)
+                                        for i, doc in enumerate(batch_docs):
+                                            actual_index = batch_start + i
+                                            # Update progress
+                                            progress = 0.2 + (0.5 * (actual_index + 1) / len(documents))
+                                            progress_bar.progress(progress)
+                                            status_text.text(f"📥 Downloading {actual_index+1}/{len(documents)}: {doc['name'][:50]}...")
+                                            
+                                            # Keep session alive with multiple updates
+                                            placeholder.text(f"Batch {batch_start//batch_size + 1}/{(len(documents)-1)//batch_size + 1}")
+                                            heartbeat_container.text(f"Processing... {datetime.now().strftime('%H:%M:%S')}")
+                                            
+                                            # Add small delay to prevent UI freezing
+                                            import time
+                                            if actual_index % 10 == 0:
+                                                time.sleep(0.1)  # Brief pause
+                                            
+                                            try:
+                                                # Download file with timeout
+                                                file_info = gdrive.download_file(doc['id'], doc['name'], config.SOP_FOLDER)
+                                                if file_info:
+                                                    downloaded_files.append(file_info)
+                                                else:
+                                                    failed_downloads.append(doc['name'])
+                                                    
+                                                # Update sync state after each file
+                                                sync_state['completed_count'] = actual_index + 1
+                                                sync_state['downloaded_files'] = downloaded_files
+                                                sync_state['failed_files'] = failed_downloads
+                                                st.session_state.sync_state = sync_state
+                                                
+                                                # Save state periodically (every 10 files)
+                                                if (actual_index + 1) % 10 == 0:
+                                                    self._save_sync_state()
+                                                    
+                                            except Exception as e:
+                                                failed_downloads.append(f"{doc['name']}: {str(e)}")
+                                                sync_state['failed_files'] = failed_downloads
+                                                continue
                                     
                                     # Step 3: Process into knowledge base
                                     status_text.text("🧠 Processing documents into knowledge base...")
@@ -315,6 +392,12 @@ class UserManager:
                                     progress_bar.progress(1.0)
                                     status_text.text("✅ Sync complete!")
                                     
+                                    # Update final sync state
+                                    sync_state['status'] = 'completed'
+                                    sync_state['end_time'] = datetime.now().isoformat()
+                                    st.session_state.sync_state = sync_state
+                                    self._save_sync_state()
+                                    
                                     # Success message
                                     st.success(f"""
                                     ✅ **Successfully synced {len(downloaded_files)} documents!**
@@ -324,8 +407,40 @@ class UserManager:
                                     - Ready for queries in main app
                                     """)
                                     
+                                    if failed_downloads:
+                                        with st.expander(f"⚠️ {len(failed_downloads)} files failed to download", expanded=False):
+                                            for failed in failed_downloads[:10]:
+                                                st.text(f"❌ {failed}")
+                                            if len(failed_downloads) > 10:
+                                                st.text(f"... and {len(failed_downloads) - 10} more")
+                                    
                                     # Save preferred folder
                                     st.session_state.preferred_sync_folder = folder_id
+                                    
+                                    # Clear sync state after successful completion
+                                    if 'sync_state' in st.session_state:
+                                        del st.session_state.sync_state
+                                    self._clear_sync_state()
+                                
+                                except Exception as e:
+                                    # Handle timeout or other errors
+                                    st.error(f"⚠️ Sync interrupted: {str(e)}")
+                                    
+                                    # Mark sync as interrupted for resume capability
+                                    if 'sync_state' in st.session_state:
+                                        st.session_state.sync_state['status'] = 'interrupted'
+                                        st.session_state.sync_state['error'] = str(e)
+                                        self._save_sync_state()
+                                        
+                                        completed = st.session_state.sync_state.get('completed_count', 0)
+                                        total = st.session_state.sync_state.get('total_count', len(documents))
+                                        
+                                        st.info(f"""
+                                        📝 **Progress saved**: {completed}/{total} files processed
+                                        
+                                        You can resume the sync by refreshing the page and clicking 'Resume Sync'.
+                                        All progress has been saved automatically.
+                                        """)
                             
                             # Show sample files
                             if documents and len(documents) > 0:
@@ -430,6 +545,33 @@ class UserManager:
                         if 'auth_url' in st.session_state:
                             del st.session_state.auth_url
                         st.info("🔄 Please click 'Connect Google Drive' to generate a new authorization link.")
+    
+    def _save_sync_state(self):
+        """Save sync state to file for recovery"""
+        try:
+            if 'sync_state' in st.session_state:
+                with open('.sync_state.json', 'w') as f:
+                    json.dump(st.session_state.sync_state, f)
+        except Exception:
+            pass
+    
+    def _load_sync_state(self):
+        """Load sync state from file if exists"""
+        try:
+            if os.path.exists('.sync_state.json'):
+                with open('.sync_state.json', 'r') as f:
+                    return json.load(f)
+        except Exception:
+            pass
+        return None
+    
+    def _clear_sync_state(self):
+        """Clear saved sync state"""
+        try:
+            if os.path.exists('.sync_state.json'):
+                os.remove('.sync_state.json')
+        except Exception:
+            pass
     
     def _start_google_auth(self, config_json: str):
         """Start Google OAuth flow - use the WORKING method from cloud_storage.py"""
