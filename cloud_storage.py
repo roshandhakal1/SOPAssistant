@@ -47,8 +47,8 @@ class GoogleDriveManager:
             self.credentials = flow.credentials
             self.service = build('drive', 'v3', credentials=self.credentials)
             
-            # Save credentials to session state
-            st.session_state.gdrive_credentials = {
+            # Save credentials to session state and persistent storage
+            cred_data = {
                 'token': self.credentials.token,
                 'refresh_token': self.credentials.refresh_token,
                 'token_uri': self.credentials.token_uri,
@@ -56,15 +56,39 @@ class GoogleDriveManager:
                 'client_secret': self.credentials.client_secret,
                 'scopes': self.credentials.scopes
             }
+            st.session_state.gdrive_credentials = cred_data
+            
+            # Save to file for persistence across sessions
+            try:
+                import json
+                with open('.gdrive_credentials.json', 'w') as f:
+                    json.dump(cred_data, f)
+            except Exception:
+                pass  # Ignore file save errors
             return True
         except Exception as e:
             st.error(f"Authentication failed: {str(e)}")
             return False
     
     def load_saved_credentials(self) -> bool:
-        """Load credentials from session state"""
+        """Load credentials from session state or persistent storage"""
+        cred_data = None
+        
+        # Try session state first
         if 'gdrive_credentials' in st.session_state:
             cred_data = st.session_state.gdrive_credentials
+        else:
+            # Try loading from file
+            try:
+                import json
+                with open('.gdrive_credentials.json', 'r') as f:
+                    cred_data = json.load(f)
+                    # Also save to session state
+                    st.session_state.gdrive_credentials = cred_data
+            except Exception:
+                pass
+        
+        if cred_data:
             self.credentials = Credentials(
                 token=cred_data['token'],
                 refresh_token=cred_data['refresh_token'],
@@ -77,8 +101,15 @@ class GoogleDriveManager:
             # Refresh if needed
             if self.credentials.expired and self.credentials.refresh_token:
                 self.credentials.refresh(Request())
-                # Update session state with new token
-                st.session_state.gdrive_credentials['token'] = self.credentials.token
+                # Update both session state and file with new token
+                cred_data['token'] = self.credentials.token
+                st.session_state.gdrive_credentials = cred_data
+                try:
+                    import json
+                    with open('.gdrive_credentials.json', 'w') as f:
+                        json.dump(cred_data, f)
+                except Exception:
+                    pass
             
             self.service = build('drive', 'v3', credentials=self.credentials)
             return True
@@ -209,6 +240,13 @@ class CloudStorageUI:
             if st.button("🔓 Disconnect Google Drive"):
                 if 'gdrive_credentials' in st.session_state:
                     del st.session_state.gdrive_credentials
+                # Also remove persistent file
+                try:
+                    import os
+                    if os.path.exists('.gdrive_credentials.json'):
+                        os.remove('.gdrive_credentials.json')
+                except Exception:
+                    pass
                 st.rerun()
         else:
             self._render_authentication_flow()

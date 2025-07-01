@@ -565,13 +565,7 @@ def main():
             
             st.divider()
             
-            # Cloud Storage Integration
-            cloud_ui = CloudStorageUI()
-            cloud_ui.render_google_drive_setup()
-            
-            st.divider()
-            
-            # Existing document management
+            # Document management for all users
             col1, col2 = st.columns([1, 1])
             with col1:
                 if st.button("🔄 Check for Updates", type="secondary", use_container_width=True):

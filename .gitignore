@@ -2,6 +2,7 @@
 .env
 .streamlit/secrets.toml
 config.ini
+.gdrive_credentials.json
 
 # Database and cache
 chroma_db/

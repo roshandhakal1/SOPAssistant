@@ -181,7 +181,7 @@ class UserManager:
         st.markdown("## 👥 User Management Portal")
         
         # Tabs for different admin functions
-        tab1, tab2, tab3, tab4 = st.tabs(["📋 All Users", "➕ Add User", "⚙️ User Settings", "🤖 Model Settings"])
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 All Users", "➕ Add User", "⚙️ User Settings", "🤖 Model Settings", "☁️ Cloud Storage"])
         
         with tab1:
             self._render_users_list()
@@ -194,6 +194,9 @@ class UserManager:
         
         with tab4:
             self._render_model_settings()
+            
+        with tab5:
+            self._render_cloud_storage()
     
     def _render_users_list(self):
         """Render list of all users."""
@@ -474,3 +477,14 @@ class UserManager:
             current_user = self.users.get(st.session_state.username, {})
             user_model = current_user.get('model', 'default')
             st.info(f"💡 You are currently using: **{self.available_models.get(user_model, user_model)}**")
+    
+    def _render_cloud_storage(self):
+        """Render cloud storage admin settings."""
+        from cloud_storage import CloudStorageUI
+        
+        st.markdown("### ☁️ Cloud Storage Management")
+        st.info("Configure cloud storage integration for all users. Only admins can manage cloud storage settings.")
+        
+        # Initialize cloud storage UI
+        cloud_ui = CloudStorageUI()
+        cloud_ui.render_google_drive_setup()
