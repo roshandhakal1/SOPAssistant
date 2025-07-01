@@ -17,9 +17,9 @@ class AuthManager:
     
     def __init__(self):
         self.user_manager = UserManager()
-        # Session timeout (4 hours for normal session, 30 days for remember me)
-        self.session_timeout = timedelta(hours=4)
-        self.remember_timeout = timedelta(days=30)
+        # SECURITY FIX: Shorter, more secure session timeouts
+        self.session_timeout = timedelta(hours=2)  # 2 hours for normal session
+        self.remember_timeout = timedelta(days=7)  # 7 days max for remember me
         
         # Initialize session persistence
         self._init_session_persistence()
@@ -183,7 +183,7 @@ class AuthManager:
             with st.form("login_form"):
                 username = st.text_input("Username", placeholder="Enter your username")
                 password = st.text_input("Password", type="password", placeholder="Enter your password")
-                remember_me = st.checkbox("Remember me for 30 days", value=True)
+                remember_me = st.checkbox("Remember me for 7 days", value=False)
                 
                 login_button = st.form_submit_button("Sign In", type="primary", use_container_width=True)
             
@@ -209,7 +209,7 @@ class AuthManager:
         return False
     
     def _save_persistent_session(self, user_data: Dict) -> None:
-        """Save session data to persistent storage."""
+        """Save session data to secure browser-only storage."""
         try:
             session_data = {
                 "username": user_data["username"],
@@ -218,48 +218,28 @@ class AuthManager:
                 "user_email": user_data.get("email", ""),
                 "login_time": user_data["login_time"].isoformat(),
                 "remember_me": True,
-                "expires": (datetime.now() + self.remember_timeout).isoformat()
+                "expires": (datetime.now() + self.remember_timeout).isoformat(),
+                "session_id": hashlib.sha256(f"{user_data['username']}{datetime.now().isoformat()}".encode()).hexdigest()
             }
             
-            # Method 1: Streamlit session state (primary)
+            # SECURITY FIX: Only use Streamlit session state (browser-only, session-specific)
+            # This ensures sessions don't persist across different devices/browsers
             st.session_state._persistent_session = session_data
             
-            # Method 2: Environment variable (works on cloud deployments)
-            os.environ['USER_SESSION'] = json.dumps(session_data)
-            
-            # Method 3: File storage (fallback)
-            try:
-                with open('.user_session.json', 'w') as f:
-                    json.dump(session_data, f)
-            except Exception:
-                pass
+            # DO NOT save to environment variables or files - major security risk
                 
         except Exception:
             pass  # Fail silently if can't save
     
     def _load_persistent_session(self) -> bool:
-        """Load session data from persistent storage."""
+        """Load session data from secure browser-only storage."""
         try:
             session_data = None
             
-            # Try Streamlit session state first (most reliable)
+            # SECURITY FIX: Only check Streamlit session state (browser-only)
+            # Do NOT check environment variables or files - prevents cross-device login
             if hasattr(st.session_state, '_persistent_session'):
                 session_data = st.session_state._persistent_session
-            
-            # Try environment variable 
-            if not session_data and 'USER_SESSION' in os.environ:
-                try:
-                    session_data = json.loads(os.environ['USER_SESSION'])
-                except Exception:
-                    pass
-            
-            # Try file storage as fallback
-            if not session_data:
-                try:
-                    with open('.user_session.json', 'r') as f:
-                        session_data = json.load(f)
-                except Exception:
-                    pass
             
             if session_data:
                 # Check if session is still valid
@@ -295,15 +275,16 @@ class AuthManager:
     def _clear_persistent_session(self) -> None:
         """Clear persistent session storage."""
         try:
-            # Clear Streamlit session state
+            # SECURITY FIX: Only clear Streamlit session state
             if hasattr(st.session_state, '_persistent_session'):
                 del st.session_state._persistent_session
             
-            # Clear environment variable
+            # Clean up any legacy insecure storage that might exist
+            # Clear environment variable if it exists (cleanup legacy)
             if 'USER_SESSION' in os.environ:
                 del os.environ['USER_SESSION']
             
-            # Clear file
+            # Clear file if it exists (cleanup legacy)
             try:
                 if os.path.exists('.user_session.json'):
                     os.remove('.user_session.json')
