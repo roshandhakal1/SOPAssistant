@@ -6,7 +6,7 @@ from typing import List, Dict, Optional
 import streamlit as st
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import Flow
+from google_auth_oauthlib.flow import Flow, InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 import tempfile
@@ -19,13 +19,25 @@ class GoogleDriveManager:
         
     def setup_oauth_flow(self, client_config: Dict) -> str:
         """Setup OAuth flow and return authorization URL"""
+        # Try with the simplest redirect URI that should work
+        redirect_uri = 'urn:ietf:wg:oauth:2.0:oob'
+        
+        # Check if the config has redirect_uris and use the first one
+        if 'installed' in client_config and 'redirect_uris' in client_config['installed']:
+            redirect_uris = client_config['installed']['redirect_uris']
+            if redirect_uris and len(redirect_uris) > 0:
+                redirect_uri = redirect_uris[0]
+        
         flow = Flow.from_client_config(
             client_config,
             scopes=self.SCOPES,
-            redirect_uri='urn:ietf:wg:oauth:2.0:oob'
+            redirect_uri=redirect_uri
         )
         
-        auth_url, _ = flow.authorization_url(prompt='consent')
+        auth_url, _ = flow.authorization_url(
+            prompt='consent',
+            access_type='offline'
+        )
         return auth_url, flow
     
     def authenticate_with_code(self, flow: Flow, auth_code: str) -> bool:
@@ -220,7 +232,11 @@ class CloudStorageUI:
                 
                 st.success("✅ Configuration valid!")
                 st.markdown(f"**[Click here to authorize access]({auth_url})**")
-                st.info("Copy the authorization code from the browser and paste it below:")
+                st.info("After authorizing, you'll see a code. Copy and paste it below:")
+                
+                # Also show the URL in case the link doesn't work
+                with st.expander("Having trouble? Copy this URL manually:", expanded=False):
+                    st.code(auth_url, language=None)
                 
             except json.JSONDecodeError:
                 st.error("❌ Invalid JSON format")
