@@ -48,6 +48,141 @@ def initialize_components():
     chat_history_manager = ChatHistoryManager()
     return config, doc_processor, embeddings_manager, vector_db, session_doc_handler, chat_history_manager
 
+def handle_expert_chat_input(multi_expert_system):
+    """Handle chat input with expert autocomplete functionality"""
+    
+    # Initialize session state for expert input
+    if 'expert_input_key' not in st.session_state:
+        st.session_state.expert_input_key = 0
+    
+    # Expert selection interface
+    st.markdown("### 💬 Ask the Experts")
+    
+    # Quick expert selection buttons (always visible)
+    available_experts = multi_expert_system.get_available_experts()
+    
+    with st.expander("🎯 Quick Expert Selection", expanded=False):
+        st.markdown("**Click an expert to add them to your question:**")
+        
+        # Create a 3-column layout for expert buttons
+        expert_list = list(available_experts.items())
+        for i in range(0, len(expert_list), 3):
+            cols = st.columns(3)
+            for j, col in enumerate(cols):
+                if i + j < len(expert_list):
+                    expert_name, expert_info = expert_list[i + j]
+                    with col:
+                        if st.button(
+                            f"{expert_info['mention']}\n{expert_info['title'][:25]}...",
+                            key=f"quick_expert_{expert_name}_{i}_{j}",
+                            help=f"Specializes in: {', '.join(expert_info['specializations'])}",
+                            use_container_width=True
+                        ):
+                            # Add this expert to the input
+                            current_text = st.session_state.get('current_expert_input', '')
+                            if f"@{expert_name}" not in current_text:
+                                new_text = f"@{expert_name} {current_text}".strip()
+                                st.session_state.current_expert_input = new_text
+                                st.session_state.expert_input_key += 1
+                                st.rerun()
+    
+    # Main text input with chat-like interface
+    user_input = st.text_area(
+        "Your question:",
+        value=st.session_state.get('current_expert_input', ''),
+        placeholder="Type your question here... Use @ to mention specific experts (e.g., @QualityExpert @ManufacturingExpert how do we improve our process?)",
+        height=100,
+        key=f"expert_chat_textarea_{st.session_state.expert_input_key}"
+    )
+    
+    # Update session state
+    st.session_state.current_expert_input = user_input
+    
+    # Show expert suggestions when @ is typed
+    if "@" in user_input:
+        # Find all @ mentions
+        import re
+        at_positions = [m.start() for m in re.finditer(r'@', user_input)]
+        
+        if at_positions:
+            last_at_pos = at_positions[-1]
+            # Get text after the last @
+            text_after_last_at = user_input[last_at_pos + 1:].split()[0] if last_at_pos + 1 < len(user_input) else ""
+            
+            # Show suggestions for incomplete mentions
+            if not text_after_last_at or not text_after_last_at.endswith((' ', '\n')):
+                with st.container():
+                    st.markdown("**💡 Expert Suggestions:**")
+                    
+                    # Filter experts based on partial typing
+                    matching_experts = []
+                    for expert_name, expert_info in available_experts.items():
+                        if text_after_last_at.lower() in expert_name.lower():
+                            matching_experts.append((expert_name, expert_info))
+                    
+                    if matching_experts:
+                        # Show top 6 matching experts in 2 rows of 3
+                        for i in range(0, min(6, len(matching_experts)), 3):
+                            cols = st.columns(3)
+                            for j, col in enumerate(cols):
+                                if i + j < len(matching_experts):
+                                    expert_name, expert_info = matching_experts[i + j]
+                                    with col:
+                                        if st.button(
+                                            f"@{expert_name}",
+                                            key=f"suggest_expert_{expert_name}_{i}_{j}",
+                                            help=f"{expert_info['title']} - {', '.join(expert_info['specializations'][:2])}",
+                                            use_container_width=True
+                                        ):
+                                            # Replace the incomplete mention
+                                            before_at = user_input[:last_at_pos]
+                                            after_mention = user_input[last_at_pos + 1 + len(text_after_last_at):]
+                                            new_text = f"{before_at}@{expert_name} {after_mention}".strip()
+                                            st.session_state.current_expert_input = new_text
+                                            st.session_state.expert_input_key += 1
+                                            st.rerun()
+    
+    # Send button and actions
+    col1, col2, col3 = st.columns([3, 1, 1])
+    
+    with col1:
+        # Show mentioned experts
+        mentioned_experts = []
+        if user_input:
+            import re
+            mentions = re.findall(r'@(\w+)', user_input)
+            for mention in mentions:
+                for expert_name in available_experts.keys():
+                    if mention.lower() == expert_name.lower() or mention.lower() in expert_name.lower():
+                        if expert_name not in mentioned_experts:
+                            mentioned_experts.append(expert_name)
+                        break
+        
+        if mentioned_experts:
+            expert_names = [multi_expert_system.experts[name].name for name in mentioned_experts]
+            st.info(f"📋 **Consulting:** {', '.join(expert_names)}")
+    
+    with col2:
+        clear_clicked = st.button("🗑️ Clear", help="Clear the input", use_container_width=True)
+    
+    with col3:
+        send_clicked = st.button("🚀 Send", type="primary", use_container_width=True)
+    
+    # Handle actions
+    if clear_clicked:
+        st.session_state.current_expert_input = ""
+        st.session_state.expert_input_key += 1
+        st.rerun()
+    
+    if send_clicked and user_input.strip():
+        final_prompt = user_input.strip()
+        # Clear the input
+        st.session_state.current_expert_input = ""
+        st.session_state.expert_input_key += 1
+        return final_prompt
+    
+    return None
+
 def get_model_components(config, vector_db):
     """Get model-specific components based on user settings."""
     from user_manager import UserManager
@@ -762,10 +897,16 @@ def main():
         doc_count = len(st.session_state.uploaded_documents)
         st.success(f"📎 {doc_count} reference document{'s' if doc_count != 1 else ''} loaded for this conversation")
     
-    # Update placeholder based on mode
-    placeholder = "Ask about your SOPs..." if st.session_state.mode == 'standard' else "Ask experts: @QualityExpert, @ManufacturingExpert, @ProcessEngineeringExpert, etc. or just ask your question..."
+    # Handle chat input with expert autocomplete
+    if st.session_state.mode == 'expert_consultant':
+        # Expert mode with autocomplete
+        prompt = handle_expert_chat_input(multi_expert_system)
+    else:
+        # Standard mode - simple chat input
+        placeholder = "Ask about your SOPs..."
+        prompt = st.chat_input(placeholder)
     
-    if prompt := st.chat_input(placeholder):
+    if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
