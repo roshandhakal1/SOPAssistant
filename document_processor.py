@@ -5,6 +5,8 @@ import PyPDF2
 from docx import Document
 import tempfile
 import platform
+import csv
+import io
 
 class DocumentProcessor:
     def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200):
@@ -21,6 +23,8 @@ class DocumentProcessor:
             text = self._extract_docx_text(file_path)
         elif extension == '.doc':
             text = self._extract_doc_text(file_path)
+        elif extension == '.csv':
+            text = self._extract_csv_text(file_path)
         else:
             raise ValueError(f"Unsupported file type: {extension}")
         
@@ -106,6 +110,34 @@ class DocumentProcessor:
             return text
         except Exception as e:
             raise Exception(f"Unable to read .doc file. Please install python-docx-win32 on Windows or ensure textutil is available on macOS: {str(e)}")
+    
+    def _extract_csv_text(self, file_path: Path) -> str:
+        text = ""
+        try:
+            with open(file_path, 'r', encoding='utf-8', newline='') as csvfile:
+                # Try to detect delimiter
+                sample = csvfile.read(1024)
+                csvfile.seek(0)
+                sniffer = csv.Sniffer()
+                delimiter = sniffer.sniff(sample).delimiter
+                
+                reader = csv.reader(csvfile, delimiter=delimiter)
+                for row_num, row in enumerate(reader):
+                    if row_num == 0:
+                        # Header row
+                        text += "Headers: " + " | ".join(row) + "\n"
+                    else:
+                        text += "Row " + str(row_num) + ": " + " | ".join(row) + "\n"
+        except UnicodeDecodeError:
+            # Try with different encoding
+            with open(file_path, 'r', encoding='latin-1', newline='') as csvfile:
+                reader = csv.reader(csvfile)
+                for row_num, row in enumerate(reader):
+                    if row_num == 0:
+                        text += "Headers: " + " | ".join(row) + "\n"
+                    else:
+                        text += "Row " + str(row_num) + ": " + " | ".join(row) + "\n"
+        return text
     
     def _split_text(self, text: str) -> List[str]:
         chunks = []

@@ -85,7 +85,7 @@ def check_for_updates(config, doc_processor, embeddings_manager, vector_db):
     updates = []
     
     for file_path in Path(sop_folder).glob("**/*"):
-        if file_path.suffix.lower() in ['.pdf', '.docx', '.doc']:
+        if file_path.suffix.lower() in ['.pdf', '.docx', '.doc', '.csv']:
             file_str = str(file_path)
             file_hash = get_file_hash(file_str)
             new_index[file_str] = file_hash
@@ -482,40 +482,78 @@ def main():
             
             # Upload section
             st.subheader("📤 Upload Documents")
+            
+            # Bulk upload with folder-like functionality
             uploaded_files = st.file_uploader(
-                "Upload PDF or Word documents:",
-                type=['pdf', 'docx', 'doc'],
+                "Upload your SOP documents (PDF, Word, CSV):",
+                type=['pdf', 'docx', 'doc', 'csv'],
                 accept_multiple_files=True,
-                help="Upload your SOP documents to add them to the knowledge base"
+                help="Select multiple files from your SOP folder. Supports PDF, DOC, DOCX, and CSV files."
             )
             
             if uploaded_files:
-                upload_col1, upload_col2 = st.columns([3, 1])
+                st.info(f"📂 Selected {len(uploaded_files)} files for processing")
+                
+                # Show file list with sizes
+                with st.expander("View Selected Files", expanded=len(uploaded_files) <= 5):
+                    for file in uploaded_files:
+                        file_size = len(file.getvalue()) / 1024  # KB
+                        st.text(f"📄 {file.name} ({file_size:.1f} KB)")
+                
+                upload_col1, upload_col2 = st.columns([2, 1])
                 with upload_col1:
-                    if st.button("Process Uploaded Files", type="primary"):
+                    if st.button("🚀 Process All Files", type="primary", use_container_width=True):
                         # Ensure documents folder exists
                         Path(config.SOP_FOLDER).mkdir(exist_ok=True)
                         
-                        with st.spinner("Processing uploaded files..."):
-                            for uploaded_file in uploaded_files:
+                        # Process files one by one with progress
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
+                        
+                        successful = 0
+                        failed_files = []
+                        
+                        for i, uploaded_file in enumerate(uploaded_files):
+                            try:
+                                status_text.text(f"Processing: {uploaded_file.name}")
+                                progress_bar.progress((i + 1) / len(uploaded_files))
+                                
                                 # Save uploaded file
                                 file_path = Path(config.SOP_FOLDER) / uploaded_file.name
                                 with open(file_path, "wb") as f:
                                     f.write(uploaded_file.getbuffer())
-                                st.success(f"Saved: {uploaded_file.name}")
-                            
-                            # Update database with new files
-                            updates, removed_files, new_index = check_for_updates(
-                                config, doc_processor, embeddings_manager, vector_db
-                            )
-                            if updates:
-                                process_updates(updates, removed_files, new_index, 
-                                              doc_processor, embeddings_manager, vector_db)
-                                st.success(f"Successfully processed {len(updates)} documents!")
-                            else:
-                                st.info("No new documents to process")
+                                
+                                successful += 1
+                                
+                            except Exception as e:
+                                failed_files.append(f"{uploaded_file.name}: {str(e)}")
+                        
+                        # Update database with new files
+                        status_text.text("Updating knowledge base...")
+                        updates, removed_files, new_index = check_for_updates(
+                            config, doc_processor, embeddings_manager, vector_db
+                        )
+                        
+                        if updates:
+                            process_updates(updates, removed_files, new_index, 
+                                          doc_processor, embeddings_manager, vector_db)
+                        
+                        # Show results
+                        progress_bar.empty()
+                        status_text.empty()
+                        
+                        if successful > 0:
+                            st.success(f"✅ Successfully processed {successful}/{len(uploaded_files)} files!")
+                        
+                        if failed_files:
+                            st.error("❌ Failed to process some files:")
+                            for error in failed_files:
+                                st.text(f"• {error}")
+                
                 with upload_col2:
-                    st.caption(f"{len(uploaded_files)} file(s) selected")
+                    total_size = sum(len(f.getvalue()) for f in uploaded_files) / (1024 * 1024)  # MB
+                    st.metric("Total Size", f"{total_size:.1f} MB")
+                    st.caption("Batch processing recommended for large uploads")
             
             st.divider()
             
