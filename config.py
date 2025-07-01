@@ -6,10 +6,14 @@ load_dotenv()
 
 class Config:
     def __init__(self):
-        # Just use environment variables from .env file
-        self.SOP_FOLDER = os.getenv("SOP_FOLDER", "./documents")
+        # Cloud Run compatible paths - use /tmp for writable storage
+        self.SOP_FOLDER = os.getenv("SOP_FOLDER", "/tmp/documents")
         self.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-        self.CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
+        self.CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "/tmp/chroma_db")
+        
+        # Ensure directories exist
+        os.makedirs(self.SOP_FOLDER, exist_ok=True)
+        os.makedirs(self.CHROMA_PERSIST_DIR, exist_ok=True)
         
         self.CHUNK_SIZE = 1000
         self.CHUNK_OVERLAP = 200

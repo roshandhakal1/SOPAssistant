@@ -11,7 +11,7 @@ from vector_db import VectorDatabase
 from rag_handler import RAGHandler
 from config import Config
 from multi_expert_system import MultiExpertSystem
-from session_document_handler import SessionDocumentHandler
+# Session document handler removed - all document management in Admin Portal
 from auth import require_auth
 from chat_history_manager import ChatHistoryManager
 from cloud_storage import CloudStorageUI
@@ -44,134 +44,128 @@ def initialize_components():
     doc_processor = DocumentProcessor()
     embeddings_manager = EmbeddingsManager(config.GEMINI_API_KEY)
     vector_db = VectorDatabase(config.CHROMA_PERSIST_DIR)
-    session_doc_handler = SessionDocumentHandler(embeddings_manager)
     chat_history_manager = ChatHistoryManager()
-    return config, doc_processor, embeddings_manager, vector_db, session_doc_handler, chat_history_manager
+    return config, doc_processor, embeddings_manager, vector_db, chat_history_manager
 
 def handle_unified_chat_input(multi_expert_system):
-    """Unified chat input with smart @mention autocomplete"""
-    
-    # Initialize session state
-    if 'chat_input_text' not in st.session_state:
-        st.session_state.chat_input_text = ""
-    if 'show_expert_suggestions' not in st.session_state:
-        st.session_state.show_expert_suggestions = False
-    if 'current_at_position' not in st.session_state:
-        st.session_state.current_at_position = -1
+    """Unified chat input with enhanced expert selection and quick reference"""
     
     available_experts = multi_expert_system.get_available_experts()
     
-    # Custom text area that can detect @ and show suggestions
     st.markdown("### 💬 Ask your question:")
     
-    # Text area for input
-    user_input = st.text_area(
-        "Your message:",
-        value=st.session_state.chat_input_text,
-        placeholder="Ask about your SOPs or type @ to see expert suggestions...",
-        height=100,
-        key="smart_chat_input",
-        label_visibility="collapsed"
+    # Apple-style Expert Quick Select - properly spaced
+    with st.container():
+        st.markdown("**🎯 Expert Quick Select**")
+        st.caption("Click to add expert to your message")
+        st.markdown("")  # Breathing room
+        
+        # Apple-style: 3 columns max to prevent cramming, with proper spacing
+        expert_list = list(available_experts.items())
+        
+        # Show in rows of 3 for clean Apple-style layout
+        for i in range(0, len(expert_list), 3):
+            cols = st.columns(3)
+            
+            for j, col in enumerate(cols):
+                if i + j < len(expert_list):
+                    expert_name, expert_info = expert_list[i + j]
+                    display_name = expert_name.replace("Expert", "")
+                    
+                    with col:
+                        if st.button(
+                            f"@{display_name}",
+                            key=f"quick_select_{expert_name}",
+                            help=f"{expert_info['title']}\n• {expert_info['specializations'][0]}",
+                            use_container_width=True
+                        ):
+                            # Store the mention for next input
+                            if "pending_mentions" not in st.session_state:
+                                st.session_state.pending_mentions = []
+                            if f"@{expert_name}" not in st.session_state.pending_mentions:
+                                st.session_state.pending_mentions.append(f"@{expert_name}")
+        
+        st.markdown("")  # Spacer
+        
+        # Show pending mentions if any - Apple-style clean presentation
+        if st.session_state.get("pending_mentions", []):
+            st.success(f"**Selected:** {' '.join(st.session_state.pending_mentions)}")
+            if st.button("🗑️ Clear", key="clear_mentions", use_container_width=False):
+                st.session_state.pending_mentions = []
+                st.rerun()
+    
+    # Apple-style syntax guide - clean and minimal
+    with st.expander("📝 @Mention Guide", expanded=False):
+        st.markdown("**Type @ in chat for expert consultation:**")
+        st.markdown("")
+        
+        # Clean list format instead of messy table
+        for expert_name, expert_info in available_experts.items():
+            clean_name = expert_name.replace("Expert", "")
+            main_spec = expert_info['specializations'][0] if expert_info['specializations'] else ""
+            
+            st.markdown(f"**@{clean_name}** — {main_spec}")
+        
+        st.divider()
+        st.markdown("**Examples:**")
+        st.code("""@Quality What's our contamination protocol?
+@Manufacturing equipment maintenance guide
+@Safety chemical handling procedures""")
+        st.markdown("")
+    
+    # Apple-style advanced selection - clean checkboxes
+    with st.expander("🔧 Advanced: Multiple Experts", expanded=False):
+        st.markdown("**Select multiple experts for comprehensive consultation:**")
+        st.markdown("")
+        
+        selected_experts = []
+        
+        # Single column for cleaner Apple-style layout
+        for expert_name, expert_info in expert_list:
+            clean_name = expert_name.replace('Expert', '')
+            if st.checkbox(
+                f"@{clean_name}",
+                key=f"expert_checkbox_{expert_name}",
+                help=f"{expert_info['title']}"
+            ):
+                selected_experts.append(expert_name)
+        
+        st.markdown("")
+        if selected_experts:
+            expert_names = [multi_expert_system.experts[name].name for name in selected_experts]
+            st.success(f"**Selected:** {', '.join(expert_names)}")
+    
+    # Regular chat input with enhanced placeholder
+    user_input = st.chat_input(
+        "Ask about your SOPs or get expert insights... (Try: @Quality, @Manufacturing, @Safety, etc.)",
+        key="main_chat_input"
     )
     
-    # Update session state
-    st.session_state.chat_input_text = user_input
-    
-    # Check for @ mentions and show suggestions
-    if "@" in user_input:
-        # Find the last @ position
-        last_at_pos = user_input.rfind("@")
+    # If user typed something, process the input
+    if user_input:
+        final_input = user_input
         
-        # Get text after the last @
-        text_after_at = ""
-        if last_at_pos + 1 < len(user_input):
-            remaining_text = user_input[last_at_pos + 1:]
-            # Get the partial expert name (until space or end)
-            text_after_at = remaining_text.split()[0] if remaining_text.split() else remaining_text
+        # Add pending mentions from button clicks
+        if st.session_state.get("pending_mentions", []):
+            pending_mentions_str = " ".join(st.session_state.pending_mentions)
+            # Only add if not already in the message
+            if not any(mention in user_input for mention in st.session_state.pending_mentions):
+                final_input = f"{pending_mentions_str} {user_input}"
+            # Clear pending mentions after use
+            st.session_state.pending_mentions = []
         
-        # Only show suggestions if @ is at word boundary and incomplete
-        at_word_boundary = (last_at_pos == 0 or user_input[last_at_pos - 1] in [" ", "\n"])
+        # Also check for checkbox selections
+        selected_experts = []
+        for expert_name in available_experts.keys():
+            if st.session_state.get(f"expert_checkbox_{expert_name}", False):
+                selected_experts.append(expert_name)
         
-        if at_word_boundary and (not text_after_at or not any(text_after_at.lower() == expert.lower() for expert in available_experts.keys())):
-            # Filter experts based on partial typing
-            matching_experts = []
-            for expert_name, expert_info in available_experts.items():
-                if text_after_at.lower() in expert_name.lower():
-                    matching_experts.append((expert_name, expert_info))
-            
-            if matching_experts:
-                st.markdown("**🎯 Expert Suggestions:**")
-                st.caption("Click an expert to complete your @mention")
-                
-                # Show matching experts as clickable buttons
-                for i in range(0, len(matching_experts), 3):
-                    cols = st.columns(3)
-                    for j, col in enumerate(cols):
-                        if i + j < len(matching_experts):
-                            expert_name, expert_info = matching_experts[i + j]
-                            with col:
-                                if st.button(
-                                    f"@{expert_name}",
-                                    key=f"suggest_{expert_name}_{i}_{j}",
-                                    help=f"{expert_info['title']}\n{', '.join(expert_info['specializations'][:2])}",
-                                    use_container_width=True
-                                ):
-                                    # Replace the incomplete @mention with the selected expert
-                                    before_at = user_input[:last_at_pos]
-                                    after_mention = user_input[last_at_pos + 1 + len(text_after_at):]
-                                    new_text = f"{before_at}@{expert_name} {after_mention}".strip()
-                                    st.session_state.chat_input_text = new_text
-                                    st.rerun()
-                
-                st.markdown("---")
-    
-    # Send button and actions
-    col1, col2, col3 = st.columns([1, 1, 2])
-    
-    with col1:
-        send_clicked = st.button("🚀 Send", type="primary", use_container_width=True)
-    
-    with col2:
-        clear_clicked = st.button("🗑️ Clear", use_container_width=True)
-    
-    with col3:
-        # Show mentioned experts
-        mentioned_experts = []
-        if user_input:
-            import re
-            mentions = re.findall(r'@(\w+)', user_input)
-            for mention in mentions:
-                for expert_name in available_experts.keys():
-                    if mention.lower() == expert_name.lower():
-                        if expert_name not in mentioned_experts:
-                            mentioned_experts.append(expert_name)
-                        break
+        # Add @mentions from checkboxes if not already mentioned
+        if selected_experts and not any(f"@{expert}" in final_input for expert in selected_experts):
+            expert_mentions = " ".join([f"@{expert}" for expert in selected_experts])
+            final_input = f"{expert_mentions} {final_input}"
         
-        if mentioned_experts:
-            expert_names = [multi_expert_system.experts[name].name for name in mentioned_experts]
-            st.info(f"👥 **Will consult:** {', '.join(expert_names)}")
-    
-    # Handle actions
-    if clear_clicked:
-        st.session_state.chat_input_text = ""
-        st.rerun()
-    
-    if send_clicked and user_input.strip():
-        # Clear the input and return the message
-        st.session_state.chat_input_text = ""
-        return user_input.strip()
-    
-    # Also handle Enter key in text area (for convenience)
-    if user_input != st.session_state.get('last_input_value', '') and user_input.strip():
-        # Check if this looks like a complete question
-        if user_input.strip().endswith(('?', '.', '!')) and len(user_input.strip()) > 10:
-            st.session_state.last_input_value = user_input
-            # Auto-submit on Enter with complete question
-            if st.button("↵ Press to send", key="auto_submit_hint"):
-                st.session_state.chat_input_text = ""
-                return user_input.strip()
-        else:
-            st.session_state.last_input_value = user_input
+        return final_input
     
     return None
 
@@ -685,10 +679,27 @@ def main():
         with st.spinner("Initializing components..."):
             components = initialize_components()
             st.session_state.components = components
-            config, doc_processor, embeddings_manager, vector_db, session_doc_handler, chat_history_manager = components
+            config, doc_processor, embeddings_manager, vector_db, chat_history_manager = components
             
             # Get model-specific components
             rag_handler, expert_consultant, standard_model, expert_model = get_model_components(config, vector_db)
+            
+            # Auto-processing check for new files (if enabled)
+            if st.session_state.get('auto_processing_enabled', False):
+                try:
+                    with st.spinner("🔄 Checking for new files..."):
+                        # Check for updates and auto-process
+                        updates, removed_files, new_index = check_for_updates(
+                            config, doc_processor, embeddings_manager, vector_db
+                        )
+                        
+                        if updates:
+                            with st.spinner(f"🔄 Auto-processing {len(updates)} new files..."):
+                                process_updates(updates, removed_files, new_index, 
+                                              doc_processor, embeddings_manager, vector_db)
+                            st.success(f"✅ Auto-processed {len(updates)} new files!", icon="🤖")
+                except Exception as e:
+                    st.warning(f"Auto-processing check failed: {str(e)}")
             
             # Check if this is first run (no documents in DB)
             if not vector_db.has_documents():
@@ -709,7 +720,7 @@ def main():
                                     folder_name = "preferred subfolder" if sync_folder_id != config.GOOGLE_DRIVE_FOLDER_ID else "main folder"
                                     st.success(f"✅ Auto-synced {len(downloaded_files)} documents from Google Drive ({folder_name})!")
                     except Exception as e:
-                        st.warning("⚠️ Auto-sync failed. Manual upload available in Document Management.")
+                        st.warning("⚠️ Auto-sync failed. Contact admin to sync documents.")
                 
                 # Check for any documents (local or synced)
                 updates, removed_files, new_index = check_for_updates(
@@ -720,252 +731,147 @@ def main():
                     process_updates(updates, removed_files, new_index, 
                                   doc_processor, embeddings_manager, vector_db)
                 else:
-                    st.info("💡 No documents found. Use Document Management in sidebar to upload files.")
+                    st.info("💡 No documents found. Admin can sync documents in Admin Portal.")
             
             st.session_state.initialized = True
     else:
         # Use cached components if available
         if 'components' in st.session_state:
-            config, doc_processor, embeddings_manager, vector_db, session_doc_handler, chat_history_manager = st.session_state.components
+            config, doc_processor, embeddings_manager, vector_db, chat_history_manager = st.session_state.components
         else:
             components = initialize_components()
             st.session_state.components = components
-            config, doc_processor, embeddings_manager, vector_db, session_doc_handler, chat_history_manager = components
+            config, doc_processor, embeddings_manager, vector_db, chat_history_manager = components
         
     
     # Get model-specific components based on user settings (after component initialization)
     rag_handler, multi_expert_system, standard_model, expert_model = get_model_components(config, vector_db)
     
     with st.sidebar:
-        st.header("🏭 Manufacturing Knowledge Assistant")
-        st.success("💬 **Smart Chat Mode** - Ask questions or @mention experts for specialized insights")
+        st.markdown("### 🏭 Knowledge Assistant")
         
-        # Always show available experts in a compact format
-        with st.expander("🎯 Available Experts", expanded=False):
+        # Apple-style expert reference - properly spaced like iOS Settings
+        with st.expander("🎯 Expert Reference", expanded=False):
             available_experts = multi_expert_system.get_available_experts()
             
-            st.markdown("**Type @ in chat to see expert suggestions:**")
+            st.markdown("**Available Experts:**")
+            st.markdown("")  # Top breathing room
             
-            # Show experts in a more compact 2-column format
-            expert_list = list(available_experts.items())
-            for i in range(0, len(expert_list), 2):
-                col1, col2 = st.columns(2)
+            # Each expert in its own clean section with visual separation
+            for i, (expert_name, expert_info) in enumerate(available_experts.items()):
+                clean_name = expert_name.replace("Expert", "")
+                main_focus = expert_info['specializations'][0] if expert_info['specializations'] else expert_info['expertise']
                 
-                with col1:
-                    if i < len(expert_list):
-                        expert_name, expert_info = expert_list[i]
-                        st.markdown(f"**@{expert_name}**")
-                        st.caption(expert_info['title'][:30] + "...")
+                # Apple-style card-like spacing
+                st.markdown(f"**@{clean_name}**")
+                st.caption(f"{main_focus}")
                 
-                with col2:
-                    if i + 1 < len(expert_list):
-                        expert_name, expert_info = expert_list[i + 1]
-                        st.markdown(f"**@{expert_name}**")
-                        st.caption(expert_info['title'][:30] + "...")
+                # Add separator line between experts (except last one)
+                if i < len(available_experts) - 1:
+                    st.markdown("---")
             
-            st.info("💡 **Examples:**\n- What are the cleaning validation requirements?\n- @QualityExpert how do we validate this procedure?\n- @ManufacturingExpert @ProcessEngineeringExpert help optimize our mixing process")
+            st.markdown("")  # Bottom breathing room
+            st.divider()
+            st.markdown("**Quick Examples:**")
+            st.code("@Quality contamination protocol?\n@Manufacturing equipment maintenance\n@Safety chemical handling procedures")
+        
+        # Usage stats (if helpful)
+        with st.expander("📊 Session Info", expanded=False):
+            # Show basic session stats
+            username = st.session_state.get('username', 'Unknown')
+            login_time = st.session_state.get('login_time')
+            
+            st.markdown(f"**User:** {username}")
+            if login_time:
+                st.markdown(f"**Session:** {login_time.strftime('%H:%M')}")
+            
+            # Document count
+            try:
+                doc_count = vector_db.collection.count() if hasattr(vector_db, 'collection') else 0
+                st.markdown(f"**Knowledge Base:** {doc_count} documents")
+            except:
+                st.markdown("**Knowledge Base:** Connected")
         
         st.divider()
         
-        # Document Management with Google Drive Integration
-        with st.expander("📁 Document Management", expanded=False):
-            st.caption(f"Knowledge Base: {config.SOP_FOLDER}")
+        # Knowledge Base Status (read-only for users)
+        with st.expander("📊 Knowledge Base", expanded=False):
+            try:
+                collection_info = vector_db.get_collection_info()
+                total_chunks = collection_info.get('count', 0)
+                
+                if total_chunks > 0:
+                    estimated_docs = max(1, total_chunks // 6)
+                    st.metric("📄 Documents", f"{estimated_docs}")
+                    st.success("✅ Knowledge base is ready")
+                else:
+                    st.metric("📄 Documents", "0")
+                    st.info("💡 Admin can sync documents in Admin Portal")
+            except:
+                st.warning("⚠️ Knowledge base connection issue")
             
-            # Google Drive Integration
-            st.subheader("☁️ Google Drive Sync")
-            
+            # Google Drive connection status (read-only)
             from cloud_storage import GoogleDriveManager
             gdrive = GoogleDriveManager()
             
             if gdrive.load_saved_credentials():
-                st.success("✅ Connected to Google Drive")
-                
-                # Show configured folder info
-                if config.GOOGLE_DRIVE_FOLDER_ID:
-                    st.info(f"📂 **Main Folder**: Gemini Training (`{config.GOOGLE_DRIVE_FOLDER_ID}`)")
-                    
-                    # List subfolders and show document count
-                    subfolders = gdrive.list_folders(config.GOOGLE_DRIVE_FOLDER_ID)
-                    if subfolders:
-                        # Add option to sync main folder directly
-                        folder_options = {"📂 Main Folder (Gemini Training)": config.GOOGLE_DRIVE_FOLDER_ID}
-                        for folder in subfolders:
-                            # Get document count for each folder (with pagination)
-                            doc_count = len(gdrive.list_documents(folder['id']))
-                            folder_options[f"📁 {folder['name']} ({doc_count} docs)"] = folder['id']
-                        
-                        selected_sync_folder = st.selectbox(
-                            "Select folder to sync documents from:",
-                            options=list(folder_options.keys()),
-                            key="sync_folder_selection"
-                        )
-                        
-                        if selected_sync_folder:
-                            folder_id = folder_options[selected_sync_folder]
-                            
-                            # Show total documents in selected folder
-                            documents = gdrive.list_documents(folder_id)
-                            if documents:
-                                st.info(f"📄 **{len(documents)} documents** found in this folder")
-                                
-                                if st.button("🚀 Sync to Knowledge Base", type="primary", use_container_width=True):
-                                    with st.spinner(f"Syncing {len(documents)} documents from Google Drive..."):
-                                        # Clear documents folder first to avoid duplicates
-                                        import shutil
-                                        if Path(config.SOP_FOLDER).exists():
-                                            shutil.rmtree(config.SOP_FOLDER)
-                                        Path(config.SOP_FOLDER).mkdir(parents=True, exist_ok=True)
-                                        
-                                        # Sync files
-                                        downloaded_files = gdrive.sync_folder(folder_id, config.SOP_FOLDER)
-                                        
-                                        if downloaded_files:
-                                            # Process all files into knowledge base
-                                            updates, removed_files, new_index = check_for_updates(
-                                                config, doc_processor, embeddings_manager, vector_db
-                                            )
-                                            
-                                            if updates:
-                                                process_updates(updates, removed_files, new_index, 
-                                                              doc_processor, embeddings_manager, vector_db)
-                                            
-                                            # Save this folder as the preferred sync folder
-                                            st.session_state.preferred_sync_folder = folder_id
-                                            
-                                            st.success(f"✅ **{len(downloaded_files)} documents** synced and processed into knowledge base!")
-                                            st.info("💡 Your knowledge base is now ready for questions!")
-                                        else:
-                                            st.error("❌ No documents were synced")
-                            else:
-                                st.warning("No supported documents found in this folder")
-                    else:
-                        st.warning("No subfolders found in the main folder")
+                st.caption("🔗 Google Drive: Connected")
             else:
-                st.info("🔗 Connect Google Drive to sync documents automatically")
-                if st.button("🔐 Connect Google Drive", use_container_width=True):
-                    st.info("Go to Admin Portal to set up Google Drive integration")
-            
-            st.divider()
-            
-            # Document management for all users
-            col1, col2 = st.columns([1, 1])
-            with col1:
-                if st.button("🔄 Check for Updates", type="secondary", use_container_width=True):
-                    with st.spinner("Checking for updates..."):
-                        updates, removed_files, new_index = check_for_updates(
-                            config, doc_processor, embeddings_manager, vector_db
-                        )
-                        
-                        if updates or removed_files:
-                            st.success(f"Found {len(updates)} new/modified, {len(removed_files)} removed")
-                            process_updates(updates, removed_files, new_index, 
-                                          doc_processor, embeddings_manager, vector_db)
-                        else:
-                            st.info("All documents up to date")
-            
-            with col2:
-                collection_info = vector_db.get_collection_info()
-                unique_count = collection_info.get('unique_documents', 0)
-                total_chunks = collection_info.get('count', 0)
-                
-                # Show unique count if available, otherwise show an estimate
-                if unique_count > 0:
-                    st.metric("Total SOPs", unique_count)
-                elif total_chunks > 0:
-                    # Rough estimate: assume average 6 chunks per document
-                    estimated_docs = max(1, total_chunks // 6)
-                    st.metric("Total SOPs", f"~{estimated_docs}")
-                    st.caption(f"({total_chunks} chunks)")
-                else:
-                    st.metric("Total SOPs", 0)
+                st.caption("🔗 Google Drive: Not connected")
         
         st.divider()
         
-        # Chat Management Section
-        st.header("💬 Chat Management")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.button("🗑️ Clear Chat", type="secondary", use_container_width=True):
-                st.session_state.messages = []
-                st.rerun()
-        
-        with col2:
-            if st.button("📥 New Chat", type="secondary", use_container_width=True):
-                # Save current chat to persistent history if it has messages
-                if 'messages' in st.session_state and st.session_state.messages:
-                    username = st.session_state.get('username', 'unknown')
-                    chat_data = {
-                        'messages': st.session_state.messages.copy(),
-                        'mode': st.session_state.get('mode', 'standard')
-                    }
-                    chat_history_manager.save_chat(username, chat_data)
-                
-                # Clear current messages
-                st.session_state.messages = []
-                st.rerun()
-        
-        # Export chat button
-        if st.session_state.get('messages'):
-            if st.button("💾 Export Chat", type="secondary", use_container_width=True):
-                chat_export = {
-                    'timestamp': datetime.now().isoformat(),
-                    'mode': st.session_state.get('mode', 'standard'),
-                    'messages': st.session_state.messages
-                }
-                
-                # Create download button for JSON export
-                st.download_button(
-                    label="📥 Download Chat as JSON",
-                    data=json.dumps(chat_export, indent=2),
-                    file_name=f"chat_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                    mime="application/json"
-                )
-        
-        # Show persistent chat history
-        if hasattr(st.session_state, 'username'):
-            username = st.session_state.username
-            recent_chats = chat_history_manager.get_recent_chats(username, limit=5)
+        # Simplified Chat Controls
+        with st.expander("💬 Chat Controls", expanded=False):
+            col1, col2 = st.columns(2)
             
-            if recent_chats:
-                st.divider()
-                st.subheader("📚 Chat History")
-                
-                for i, chat in enumerate(recent_chats):
-                    chat_title = chat.get('title', 'Untitled Chat')
-                    chat_date = chat.get('timestamp', '')[:16].replace('T', ' ')
-                    mode_icon = "🤖" if chat.get('mode') == 'expert_consultant' else "📖"
-                    
-                    with st.expander(f"{mode_icon} {chat_date} - {chat_title}", expanded=False):
-                        col_load, col_delete = st.columns([3, 1])
-                        
-                        with col_load:
-                            if st.button("📂 Load Chat", key=f"load_chat_{i}"):
-                                st.session_state.messages = chat['messages']
-                                st.session_state.mode = chat['mode']
-                                st.rerun()
-                        
-                        with col_delete:
-                            if st.button("🗑️", key=f"delete_chat_{i}", help="Delete this chat"):
-                                chat_history_manager.delete_chat(username, chat['id'])
-                                st.rerun()
-                
-                # Clear all history option
-                if st.button("🗑️ Clear All History", type="secondary", help="Delete all your chat history"):
-                    chat_history_manager.clear_all_chats(username)
-                    st.success("Chat history cleared!")
+            with col1:
+                if st.button("🗑️ Clear Chat", type="secondary", use_container_width=True):
+                    st.session_state.messages = []
                     st.rerun()
+            
+            with col2:
+                if st.button("📥 New Chat", type="secondary", use_container_width=True):
+                    # Save current chat to persistent history if it has messages
+                    if 'messages' in st.session_state and st.session_state.messages:
+                        username = st.session_state.get('username', 'unknown')
+                        chat_data = {
+                            'messages': st.session_state.messages.copy(),
+                            'mode': st.session_state.get('mode', 'standard')
+                        }
+                        chat_history_manager.save_chat(username, chat_data)
+                    
+                    # Clear current messages
+                    st.session_state.messages = []
+                    st.rerun()
+            
+            # Export option if chat has messages
+            if st.session_state.get('messages'):
+                st.divider()
+                if st.button("💾 Export Chat", use_container_width=True):
+                    chat_export = {
+                        'timestamp': datetime.now().isoformat(),
+                        'messages': st.session_state.messages
+                    }
+                    
+                    # Create download button for JSON export
+                    st.download_button(
+                        label="📥 Download JSON",
+                        data=json.dumps(chat_export, indent=2),
+                        file_name=f"chat_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                        mime="application/json",
+                        use_container_width=True
+                    )
         
-        # Admin Portal (only show for admin users)
+        # Admin Portal Access (only for admin users)
         if hasattr(st.session_state, 'user_role') and st.session_state.user_role == 'admin':
             st.divider()
-            st.header("👤 Admin Portal")
             
-            if st.button("🔧 Manage Users", type="primary", use_container_width=True):
+            if st.button("🔧 Admin Portal", type="primary", use_container_width=True):
                 st.session_state.show_admin_portal = True
+                st.rerun()
             
-            st.caption("🔐 Administrator privileges detected")
+            st.caption("🔐 Admin access available")
         
     
     
@@ -981,46 +887,7 @@ def main():
             else:
                 st.markdown(content)
     
-    # Document Upload Section
-    with st.expander("📎 Upload Reference Documents", expanded=False):
-        st.markdown("Upload documents to use as additional context for this conversation (PDF, DOCX, DOC)")
-        
-        uploaded_files = st.file_uploader(
-            "Choose files",
-            accept_multiple_files=True,
-            type=['pdf', 'docx', 'doc'],
-            help="Upload documents like templates, examples, or references to enhance responses"
-        )
-        
-        # Initialize session documents
-        if 'uploaded_documents' not in st.session_state:
-            st.session_state.uploaded_documents = {}
-        
-        # Process uploaded files
-        if uploaded_files:
-            if st.button("🔄 Process Uploaded Documents"):
-                with st.spinner("Processing uploaded documents..."):
-                    processed_docs = session_doc_handler.process_uploaded_files(uploaded_files)
-                    st.session_state.uploaded_documents.update(processed_docs)
-                    st.success(f"Processed {len(processed_docs)} documents!")
-        
-        # Show uploaded documents summary
-        if st.session_state.uploaded_documents:
-            st.markdown("**Documents in this session:**")
-            summary = session_doc_handler.get_document_summary(st.session_state.uploaded_documents)
-            st.text(summary)
-            
-            if st.button("🗑️ Clear Uploaded Documents"):
-                st.session_state.uploaded_documents = {}
-                st.rerun()
-    
-    # Visual indicator for unified interface
-    st.info("🏭 **Smart Assistant** | Ask questions or @mention experts for specialized insights | Available: @QualityExpert, @ManufacturingExpert, @ProcessEngineeringExpert, etc.")
-    
-    # Show document context indicator
-    if st.session_state.uploaded_documents:
-        doc_count = len(st.session_state.uploaded_documents)
-        st.success(f"📎 {doc_count} reference document{'s' if doc_count != 1 else ''} loaded for this conversation")
+    # Clean interface - all document management moved to Admin Portal
     
     # Unified chat input with smart @mention detection
     prompt = handle_unified_chat_input(multi_expert_system)
@@ -1041,18 +908,8 @@ def main():
                     query_embedding = rag_handler.embeddings_manager.create_query_embedding(prompt)
                     sop_documents, sop_metadatas = vector_db.search(query_embedding, top_k=5)
                     
-                    # Include uploaded documents in expert analysis
-                    session_documents = []
-                    session_metadatas = []
-                    if st.session_state.uploaded_documents:
-                        session_documents, session_metadatas = session_doc_handler.search_session_documents(
-                            query_embedding, st.session_state.uploaded_documents, top_k=3
-                        )
-                    
-                    # Combine all context
+                    # Use SOP documents as context for expert consultation
                     all_context = []
-                    if session_documents:
-                        all_context.extend(session_documents)
                     if sop_documents:
                         all_context.extend(sop_documents)
                     
@@ -1120,76 +977,25 @@ def main():
             else:
                 # Standard knowledge search (no @mentions)
                 with st.spinner("Searching knowledge base..."):
-                    # Get SOP results
+                    # Get response from SOP knowledge base
                     response, sop_sources = rag_handler.query(prompt)
-                    
-                    # Check for uploaded documents
-                    session_sources = []
-                    if st.session_state.uploaded_documents:
-                        query_embedding = rag_handler.embeddings_manager.create_query_embedding(prompt)
-                        session_docs, session_metas = session_doc_handler.search_session_documents(
-                            query_embedding, st.session_state.uploaded_documents, top_k=3
-                        )
-                        
-                        if session_docs:
-                            # Get SOP context for comparison
-                            sop_embedding = rag_handler.embeddings_manager.create_query_embedding(prompt)
-                            sop_docs, sop_metas = vector_db.search(sop_embedding, top_k=3)
-                            
-                            # Create combined context
-                            combined_context = session_doc_handler.create_combined_context(
-                                sop_docs, sop_metas, session_docs, session_metas
-                            )
-                            
-                            # Generate enhanced response with session context
-                            enhanced_prompt = f"""You are a helpful assistant that answers questions based on Standard Operating Procedures (SOPs) and uploaded reference documents.
-
-{combined_context}
-
-Question: {prompt}
-
-Instructions:
-1. Give priority to information from uploaded reference documents when relevant
-2. Use SOPs as supporting context
-3. Be specific and cite sources from both uploaded documents and SOPs
-4. If creating materials, follow the format/style from uploaded reference documents
-5. Structure your answer clearly with bullet points or numbered lists when appropriate
-
-Answer:"""
-                            
-                            # Configure generation for maximum output
-                            generation_config = {
-                                "max_output_tokens": 8192,
-                                "temperature": 0.1,
-                                "top_p": 0.8,
-                                "top_k": 40
-                            }
-                            
-                            enhanced_response = rag_handler.model.generate_content(enhanced_prompt, generation_config=generation_config)
-                            response = enhanced_response.text
-                            session_sources = [meta['filename'] for meta in session_metas]
                     
                     st.markdown(response, unsafe_allow_html=True)
                     
-                    # Show sources
-                    if sop_sources or session_sources:
+                    # Show SOP sources
+                    if sop_sources:
                         st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
-                        if session_sources:
-                            st.markdown("##### 📎 Referenced Uploaded Documents")
-                            for source in session_sources:
-                                st.markdown(f'<span class="uploaded-doc-reference">{source}</span>', unsafe_allow_html=True)
-                        if sop_sources:
-                            st.markdown("##### 📎 Referenced SOPs")
-                            for source in sop_sources:
-                                if isinstance(source, dict) and 'gdrive_link' in source:
-                                    # Source with Google Drive link
-                                    st.markdown(f'<span class="sop-reference">{source["filename"]}</span> [📁 Open in Drive]({source["gdrive_link"]})', unsafe_allow_html=True)
-                                elif isinstance(source, dict):
-                                    # Source without link
-                                    st.markdown(f'<span class="sop-reference">{source["filename"]}</span>', unsafe_allow_html=True)
-                                else:
-                                    # Legacy format (just filename string)
-                                    st.markdown(f'<span class="sop-reference">{source}</span>', unsafe_allow_html=True)
+                        st.markdown("##### 📎 Referenced SOPs")
+                        for source in sop_sources:
+                            if isinstance(source, dict) and 'gdrive_link' in source:
+                                # Source with Google Drive link
+                                st.markdown(f'<span class="sop-reference">{source["filename"]}</span> [📁 Open in Drive]({source["gdrive_link"]})', unsafe_allow_html=True)
+                            elif isinstance(source, dict):
+                                # Source without link
+                                st.markdown(f'<span class="sop-reference">{source["filename"]}</span>', unsafe_allow_html=True)
+                            else:
+                                # Legacy format (just filename string)
+                                st.markdown(f'<span class="sop-reference">{source}</span>', unsafe_allow_html=True)
         
         st.session_state.messages.append({"role": "assistant", "content": response})
     
