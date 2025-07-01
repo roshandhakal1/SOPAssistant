@@ -311,7 +311,10 @@ class CloudStorageUI:
         self.gdrive = GoogleDriveManager()
     
     def render_google_drive_setup(self):
-        """Render Google Drive setup UI"""
+        """DISABLED - Use admin portal instead"""
+        import streamlit as st
+        st.error("🚫 This UI is disabled. Use Admin Portal → Cloud Storage instead.")
+        return
         st.subheader("☁️ Google Drive Integration")
         
         # Show configured folder info

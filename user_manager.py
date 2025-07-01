@@ -196,7 +196,7 @@ class UserManager:
             self._render_model_settings()
             
         with tab5:
-            self._render_cloud_storage()
+            self._render_cloud_storage_new_v2()
     
     def _render_users_list(self):
         """Render list of all users."""
@@ -478,7 +478,7 @@ class UserManager:
             user_model = current_user.get('model', 'default')
             st.info(f"💡 You are currently using: **{self.available_models.get(user_model, user_model)}**")
     
-    def _render_cloud_storage(self):
+    def _render_cloud_storage_new_v2(self):
         """Simple Google Drive integration for admin."""
         import os
         import json
