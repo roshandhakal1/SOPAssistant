@@ -7,6 +7,7 @@ import tempfile
 import platform
 import csv
 import io
+import json
 
 class DocumentProcessor:
     def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200):
@@ -32,16 +33,30 @@ class DocumentProcessor:
         
         chunks = self._split_text(text)
         
+        # Check for Google Drive metadata
+        gdrive_metadata = {}
+        metadata_file = Path(str(file_path) + '.gdrive_metadata')
+        if metadata_file.exists():
+            with open(metadata_file, 'r') as f:
+                gdrive_metadata = json.load(f)
+        
         documents = []
         for i, chunk in enumerate(chunks):
+            metadata = {
+                'source': str(file_path),
+                'filename': file_path.name,
+                'chunk_id': i,
+                'file_type': extension[1:]
+            }
+            
+            # Add Google Drive metadata if available
+            if gdrive_metadata:
+                metadata['gdrive_id'] = gdrive_metadata.get('gdrive_id')
+                metadata['gdrive_link'] = gdrive_metadata.get('gdrive_link')
+            
             documents.append({
                 'content': chunk,
-                'metadata': {
-                    'source': str(file_path),
-                    'filename': file_path.name,
-                    'chunk_id': i,
-                    'file_type': extension[1:]
-                }
+                'metadata': metadata
             })
         
         return documents

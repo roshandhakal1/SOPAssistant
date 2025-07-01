@@ -134,8 +134,8 @@ class GoogleDriveManager:
             st.error(f"Error listing documents: {str(e)}")
             return []
     
-    def download_file(self, file_id: str, file_name: str, local_folder: str) -> Optional[str]:
-        """Download a file from Google Drive"""
+    def download_file(self, file_id: str, file_name: str, local_folder: str) -> Optional[Dict]:
+        """Download a file from Google Drive and return path with metadata"""
         if not self.service:
             return None
         
@@ -152,12 +152,17 @@ class GoogleDriveManager:
                 while done is False:
                     status, done = downloader.next_chunk()
             
-            return str(local_path)
+            # Return path and metadata
+            return {
+                'path': str(local_path),
+                'gdrive_id': file_id,
+                'gdrive_link': f"https://drive.google.com/file/d/{file_id}/view"
+            }
         except Exception as e:
             st.error(f"Error downloading {file_name}: {str(e)}")
             return None
     
-    def sync_folder(self, folder_id: str, local_folder: str) -> List[str]:
+    def sync_folder(self, folder_id: str, local_folder: str) -> List[Dict]:
         """Sync entire folder from Google Drive"""
         if not self.service:
             return []
@@ -170,9 +175,18 @@ class GoogleDriveManager:
         downloaded_files = []
         
         for doc in documents:
-            local_path = self.download_file(doc['id'], doc['name'], local_folder)
-            if local_path:
-                downloaded_files.append(local_path)
+            file_info = self.download_file(doc['id'], doc['name'], local_folder)
+            if file_info:
+                downloaded_files.append(file_info)
+                
+                # Save Google Drive metadata
+                metadata_path = Path(file_info['path'] + '.gdrive_metadata')
+                with open(metadata_path, 'w') as f:
+                    json.dump({
+                        'gdrive_id': doc['id'],
+                        'gdrive_link': f"https://drive.google.com/file/d/{doc['id']}/view",
+                        'gdrive_name': doc['name']
+                    }, f)
         
         return downloaded_files
 
@@ -292,7 +306,16 @@ class CloudStorageUI:
                         
                         if downloaded_files:
                             st.success(f"✅ Successfully synced {len(downloaded_files)} documents!")
-                            st.info("Documents are now available in your knowledge base. The app will process them automatically.")
+                            st.info("Documents are now available in your knowledge base with Google Drive links.")
+                            
+                            # Show synced files with links
+                            with st.expander("View Synced Documents", expanded=True):
+                                for file_info in downloaded_files:
+                                    col1, col2 = st.columns([3, 1])
+                                    with col1:
+                                        st.text(f"📄 {Path(file_info['path']).name}")
+                                    with col2:
+                                        st.markdown(f"[Open in Drive]({file_info['gdrive_link']})")
                             
                             # Store folder ID for future syncs
                             st.session_state.gdrive_sync_folder = folder_id
@@ -310,3 +333,12 @@ class CloudStorageUI:
                     downloaded_files = self.gdrive.sync_folder(folder_id, "./documents")
                     if downloaded_files:
                         st.success(f"✅ Re-synced {len(downloaded_files)} documents!")
+                        
+                        # Show synced files with links
+                        with st.expander("View Re-synced Documents", expanded=True):
+                            for file_info in downloaded_files:
+                                col1, col2 = st.columns([3, 1])
+                                with col1:
+                                    st.text(f"📄 {Path(file_info['path']).name}")
+                                with col2:
+                                    st.markdown(f"[Open in Drive]({file_info['gdrive_link']})")

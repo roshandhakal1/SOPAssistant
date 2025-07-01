@@ -86,6 +86,10 @@ def check_for_updates(config, doc_processor, embeddings_manager, vector_db):
     updates = []
     
     for file_path in Path(sop_folder).glob("**/*"):
+        # Skip metadata files
+        if file_path.suffix.lower() == '.gdrive_metadata':
+            continue
+            
         if file_path.suffix.lower() in ['.pdf', '.docx', '.doc', '.csv', '.md']:
             file_str = str(file_path)
             file_hash = get_file_hash(file_str)
@@ -814,8 +818,16 @@ Answer:"""
                                 st.markdown(f'<span class="uploaded-doc-reference">{source}</span>', unsafe_allow_html=True)
                         if sop_sources:
                             st.markdown("##### 📎 Referenced SOPs")
-                            sop_html = " ".join([f'<span class="sop-reference">{source}</span>' for source in sop_sources])
-                            st.markdown(sop_html, unsafe_allow_html=True)
+                            for source in sop_sources:
+                                if isinstance(source, dict) and 'gdrive_link' in source:
+                                    # Source with Google Drive link
+                                    st.markdown(f'<span class="sop-reference">{source["filename"]}</span> [📁 Open in Drive]({source["gdrive_link"]})', unsafe_allow_html=True)
+                                elif isinstance(source, dict):
+                                    # Source without link
+                                    st.markdown(f'<span class="sop-reference">{source["filename"]}</span>', unsafe_allow_html=True)
+                                else:
+                                    # Legacy format (just filename string)
+                                    st.markdown(f'<span class="sop-reference">{source}</span>', unsafe_allow_html=True)
             
             else:  # Expert Consultant mode
                 with st.spinner("🏭 Manufacturing expert analyzing..."):
@@ -838,8 +850,19 @@ Answer:"""
                     if sop_documents:
                         all_context.extend(sop_documents)
                     
-                    # Combine sources
-                    sop_sources = list(set([meta['filename'] for meta in sop_metadatas])) if sop_metadatas else []
+                    # Combine sources with metadata
+                    sop_sources = []
+                    seen_files = set()
+                    if sop_metadatas:
+                        for meta in sop_metadatas:
+                            filename = meta['filename']
+                            if filename not in seen_files:
+                                seen_files.add(filename)
+                                source_info = {'filename': filename}
+                                if 'gdrive_link' in meta:
+                                    source_info['gdrive_link'] = meta['gdrive_link']
+                                sop_sources.append(source_info)
+                    
                     session_sources = [meta['filename'] for meta in session_metadatas] if session_metadatas else []
                     
                     # Analyze query
@@ -902,8 +925,16 @@ Answer:"""
                                 st.markdown(f'<span class="uploaded-doc-reference">{source}</span>', unsafe_allow_html=True)
                         if sop_sources:
                             st.markdown("##### 📎 Referenced SOPs")
-                            sop_html = " ".join([f'<span class="sop-reference">{source}</span>' for source in sop_sources])
-                            st.markdown(sop_html, unsafe_allow_html=True)
+                            for source in sop_sources:
+                                if isinstance(source, dict) and 'gdrive_link' in source:
+                                    # Source with Google Drive link
+                                    st.markdown(f'<span class="sop-reference">{source["filename"]}</span> [📁 Open in Drive]({source["gdrive_link"]})', unsafe_allow_html=True)
+                                elif isinstance(source, dict):
+                                    # Source without link
+                                    st.markdown(f'<span class="sop-reference">{source["filename"]}</span>', unsafe_allow_html=True)
+                                else:
+                                    # Legacy format (just filename string)
+                                    st.markdown(f'<span class="sop-reference">{source}</span>', unsafe_allow_html=True)
                     
                     response = expert_response['main_response']
         

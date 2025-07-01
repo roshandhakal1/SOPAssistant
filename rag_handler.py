@@ -104,9 +104,19 @@ Answer:"""
         else:
             formatted_answer = answer
         
-        sources = list(set([meta['filename'] for meta in metadatas]))
+        # Return sources with metadata (including Google Drive links if available)
+        sources_with_metadata = []
+        seen_files = set()
+        for meta in metadatas:
+            filename = meta['filename']
+            if filename not in seen_files:
+                seen_files.add(filename)
+                source_info = {'filename': filename}
+                if 'gdrive_link' in meta:
+                    source_info['gdrive_link'] = meta['gdrive_link']
+                sources_with_metadata.append(source_info)
         
-        return formatted_answer, sources
+        return formatted_answer, sources_with_metadata
     
     def _format_context(self, documents: List[str], metadatas: List[Dict]) -> str:
         context_parts = []
