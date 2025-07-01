@@ -225,7 +225,7 @@ class UserManager:
                             
                             # Create folder options
                             folder_options = {
-                                "📂 Main Folder (Gemini Training)": config.GOOGLE_DRIVE_FOLDER_ID
+                                "📂 SOPs (Main Folder)": config.GOOGLE_DRIVE_FOLDER_ID
                             }
                             
                             for folder in subfolders:
