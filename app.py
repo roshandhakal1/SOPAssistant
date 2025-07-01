@@ -85,7 +85,7 @@ def check_for_updates(config, doc_processor, embeddings_manager, vector_db):
     updates = []
     
     for file_path in Path(sop_folder).glob("**/*"):
-        if file_path.suffix.lower() in ['.pdf', '.docx', '.doc', '.csv']:
+        if file_path.suffix.lower() in ['.pdf', '.docx', '.doc', '.csv', '.md']:
             file_str = str(file_path)
             file_hash = get_file_hash(file_str)
             new_index[file_str] = file_hash
@@ -425,13 +425,16 @@ def main():
             
             # Check if this is first run (no documents in DB)
             if not vector_db.has_documents():
-                st.info("First time setup detected. Processing SOP documents...")
+                st.info("🔄 Knowledge base is empty. Upload documents in the sidebar to get started!")
                 updates, removed_files, new_index = check_for_updates(
                     config, doc_processor, embeddings_manager, vector_db
                 )
                 if updates:
+                    st.info("Found existing documents in folder. Processing...")
                     process_updates(updates, removed_files, new_index, 
                                   doc_processor, embeddings_manager, vector_db)
+                else:
+                    st.info("💡 To begin: Go to 📁 Document Management → Upload your SOP files")
             
             st.session_state.initialized = True
     else:
@@ -485,10 +488,10 @@ def main():
             
             # Bulk upload with folder-like functionality
             uploaded_files = st.file_uploader(
-                "Upload your SOP documents (PDF, Word, CSV):",
-                type=['pdf', 'docx', 'doc', 'csv'],
+                "Upload your SOP documents:",
+                type=['pdf', 'docx', 'doc', 'csv', 'md'],
                 accept_multiple_files=True,
-                help="Select multiple files from your SOP folder. Supports PDF, DOC, DOCX, and CSV files."
+                help="Select multiple files from your SOP folder. Supports PDF, DOC, DOCX, CSV, and Markdown files."
             )
             
             if uploaded_files:

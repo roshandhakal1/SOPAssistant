@@ -13,7 +13,8 @@ class VectorDatabase:
             path=persist_directory,
             settings=Settings(
                 anonymized_telemetry=False,
-                allow_reset=True
+                allow_reset=True,
+                is_persistent=True
             )
         )
         
@@ -91,7 +92,6 @@ class VectorDatabase:
             # First check if collection exists and has data
             total_count = self.collection.count()
             if total_count == 0:
-                print("No documents in collection")
                 return 0
             
             # Get all metadata to count unique sources

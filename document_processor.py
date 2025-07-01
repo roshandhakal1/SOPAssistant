@@ -25,6 +25,8 @@ class DocumentProcessor:
             text = self._extract_doc_text(file_path)
         elif extension == '.csv':
             text = self._extract_csv_text(file_path)
+        elif extension == '.md':
+            text = self._extract_markdown_text(file_path)
         else:
             raise ValueError(f"Unsupported file type: {extension}")
         
@@ -138,6 +140,10 @@ class DocumentProcessor:
                     else:
                         text += "Row " + str(row_num) + ": " + " | ".join(row) + "\n"
         return text
+    
+    def _extract_markdown_text(self, file_path: Path) -> str:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read()
     
     def _split_text(self, text: str) -> List[str]:
         chunks = []

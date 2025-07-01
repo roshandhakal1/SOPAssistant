@@ -65,9 +65,60 @@ class AuthManager:
     def render_login_page(self) -> bool:
         """Render login page and handle authentication."""
         st.markdown("""
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@300;400;500;600;700;800&display=swap');
+        
+        .login-title {
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 4rem;
+            font-weight: 800;
+            margin: 0 0 0.5rem 0;
+            letter-spacing: -0.05em;
+            color: #1d1d1f;
+            line-height: 0.9;
+            animation: fadeInTitle 1s ease-out forwards;
+        }
+        
+        .login-subtitle {
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-size: 1.3rem;
+            font-weight: 500;
+            margin: 0.5rem 0 2rem 0;
+            background: linear-gradient(135deg, #6e6e73 0%, #86868b 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.02em;
+            animation: fadeInSubtitle 1s ease-out forwards 0.3s;
+            opacity: 0;
+        }
+        
+        @keyframes fadeInTitle {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes fadeInSubtitle {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        </style>
+        
         <div style="text-align: center; padding: 2rem 0;">
-            <h1 style="color: #1d1d1f; font-size: 3rem; margin-bottom: 0.5rem; font-weight: 600;">SOP Assistant</h1>
-            <p style="color: #86868b; font-size: 1.2rem; margin-bottom: 2rem;">Manufacturing Intelligence Platform</p>
+            <h1 class="login-title">SOP Assistant</h1>
+            <p class="login-subtitle">Manufacturing Intelligence Platform</p>
         </div>
         """, unsafe_allow_html=True)
         
