@@ -292,135 +292,135 @@ class UserManager:
                                 
                                 try:
                                     with progress_container:
-                                    progress_bar = st.progress(0)
-                                    status_text = st.empty()
-                                    
-                                    # Keep session alive with heartbeat
-                                    placeholder = st.empty()
-                                    heartbeat_container = st.empty()
-                                    
-                                    # Step 1: Clear existing documents
-                                    status_text.text("🗑️ Clearing existing documents...")
-                                    progress_bar.progress(0.1)
-                                    placeholder.text("")  # Keep alive
-                                    
-                                    if Path(config.SOP_FOLDER).exists():
-                                        shutil.rmtree(config.SOP_FOLDER)
-                                    Path(config.SOP_FOLDER).mkdir(parents=True, exist_ok=True)
-                                    
-                                    # Step 2: Download documents
-                                    status_text.text(f"📥 Downloading {len(documents)} documents...")
-                                    progress_bar.progress(0.2)
-                                    
-                                    # Restore state if resuming
-                                    sync_state = st.session_state.sync_state
-                                    downloaded_files = sync_state.get('downloaded_files', [])
-                                    failed_downloads = sync_state.get('failed_files', [])
-                                    start_from = sync_state.get('completed_count', 0)
-                                    
-                                    # Process in batches to prevent timeout
-                                    batch_size = 25  # Smaller batches for better resilience
-                                    for batch_start in range(start_from, len(documents), batch_size):
-                                        batch_end = min(batch_start + batch_size, len(documents))
-                                        batch_docs = documents[batch_start:batch_end]
+                                        progress_bar = st.progress(0)
+                                        status_text = st.empty()
                                         
-                                        for i, doc in enumerate(batch_docs):
-                                            actual_index = batch_start + i
-                                            # Update progress
-                                            progress = 0.2 + (0.5 * (actual_index + 1) / len(documents))
-                                            progress_bar.progress(progress)
-                                            status_text.text(f"📥 Downloading {actual_index+1}/{len(documents)}: {doc['name'][:50]}...")
+                                        # Keep session alive with heartbeat
+                                        placeholder = st.empty()
+                                        heartbeat_container = st.empty()
+                                        
+                                        # Step 1: Clear existing documents
+                                        status_text.text("🗑️ Clearing existing documents...")
+                                        progress_bar.progress(0.1)
+                                        placeholder.text("")  # Keep alive
+                                        
+                                        if Path(config.SOP_FOLDER).exists():
+                                            shutil.rmtree(config.SOP_FOLDER)
+                                        Path(config.SOP_FOLDER).mkdir(parents=True, exist_ok=True)
+                                        
+                                        # Step 2: Download documents
+                                        status_text.text(f"📥 Downloading {len(documents)} documents...")
+                                        progress_bar.progress(0.2)
+                                        
+                                        # Restore state if resuming
+                                        sync_state = st.session_state.sync_state
+                                        downloaded_files = sync_state.get('downloaded_files', [])
+                                        failed_downloads = sync_state.get('failed_files', [])
+                                        start_from = sync_state.get('completed_count', 0)
+                                        
+                                        # Process in batches to prevent timeout
+                                        batch_size = 25  # Smaller batches for better resilience
+                                        for batch_start in range(start_from, len(documents), batch_size):
+                                            batch_end = min(batch_start + batch_size, len(documents))
+                                            batch_docs = documents[batch_start:batch_end]
                                             
-                                            # Keep session alive with multiple updates
-                                            placeholder.text(f"Batch {batch_start//batch_size + 1}/{(len(documents)-1)//batch_size + 1}")
-                                            heartbeat_container.text(f"Processing... {datetime.now().strftime('%H:%M:%S')}")
-                                            
-                                            # Add small delay to prevent UI freezing
-                                            import time
-                                            if actual_index % 10 == 0:
-                                                time.sleep(0.1)  # Brief pause
-                                            
-                                            try:
-                                                # Download file with timeout
-                                                file_info = gdrive.download_file(doc['id'], doc['name'], config.SOP_FOLDER)
-                                                if file_info:
-                                                    downloaded_files.append(file_info)
-                                                else:
-                                                    failed_downloads.append(doc['name'])
-                                                    
-                                                # Update sync state after each file
-                                                sync_state['completed_count'] = actual_index + 1
-                                                sync_state['downloaded_files'] = downloaded_files
-                                                sync_state['failed_files'] = failed_downloads
-                                                st.session_state.sync_state = sync_state
+                                            for i, doc in enumerate(batch_docs):
+                                                actual_index = batch_start + i
+                                                # Update progress
+                                                progress = 0.2 + (0.5 * (actual_index + 1) / len(documents))
+                                                progress_bar.progress(progress)
+                                                status_text.text(f"📥 Downloading {actual_index+1}/{len(documents)}: {doc['name'][:50]}...")
                                                 
-                                                # Save state periodically (every 10 files)
-                                                if (actual_index + 1) % 10 == 0:
-                                                    self._save_sync_state()
+                                                # Keep session alive with multiple updates
+                                                placeholder.text(f"Batch {batch_start//batch_size + 1}/{(len(documents)-1)//batch_size + 1}")
+                                                heartbeat_container.text(f"Processing... {datetime.now().strftime('%H:%M:%S')}")
+                                                
+                                                # Add small delay to prevent UI freezing
+                                                import time
+                                                if actual_index % 10 == 0:
+                                                    time.sleep(0.1)  # Brief pause
+                                                
+                                                try:
+                                                    # Download file with timeout
+                                                    file_info = gdrive.download_file(doc['id'], doc['name'], config.SOP_FOLDER)
+                                                    if file_info:
+                                                        downloaded_files.append(file_info)
+                                                    else:
+                                                        failed_downloads.append(doc['name'])
+                                                        
+                                                    # Update sync state after each file
+                                                    sync_state['completed_count'] = actual_index + 1
+                                                    sync_state['downloaded_files'] = downloaded_files
+                                                    sync_state['failed_files'] = failed_downloads
+                                                    st.session_state.sync_state = sync_state
                                                     
-                                            except Exception as e:
-                                                failed_downloads.append(f"{doc['name']}: {str(e)}")
-                                                sync_state['failed_files'] = failed_downloads
-                                                continue
-                                    
-                                    # Step 3: Process into knowledge base
-                                    status_text.text("🧠 Processing documents into knowledge base...")
-                                    progress_bar.progress(0.8)
-                                    
-                                    # Import required modules for processing
-                                    from document_processor import DocumentProcessor
-                                    from embeddings_manager import EmbeddingsManager
-                                    from vector_db import VectorDatabase
-                                    
-                                    doc_processor = DocumentProcessor()
-                                    embeddings_manager = EmbeddingsManager(config.GEMINI_API_KEY)
-                                    vector_db = VectorDatabase(config.CHROMA_PERSIST_DIR)
-                                    
-                                    # Check for updates and process
-                                    from app import check_for_updates, process_updates
-                                    updates, removed_files, new_index = check_for_updates(
-                                        config, doc_processor, embeddings_manager, vector_db
-                                    )
-                                    
-                                    if updates:
-                                        status_text.text(f"🔄 Processing {len(updates)} documents...")
-                                        progress_bar.progress(0.9)
-                                        process_updates(updates, removed_files, new_index, 
-                                                      doc_processor, embeddings_manager, vector_db)
-                                    
-                                    # Complete
-                                    progress_bar.progress(1.0)
-                                    status_text.text("✅ Sync complete!")
-                                    
-                                    # Update final sync state
-                                    sync_state['status'] = 'completed'
-                                    sync_state['end_time'] = datetime.now().isoformat()
-                                    st.session_state.sync_state = sync_state
-                                    self._save_sync_state()
-                                    
-                                    # Success message
-                                    st.success(f"""
-                                    ✅ **Successfully synced {len(downloaded_files)} documents!**
-                                    
-                                    - Downloaded from: {selected_folder_name}
-                                    - Processed into knowledge base
-                                    - Ready for queries in main app
-                                    """)
-                                    
-                                    if failed_downloads:
-                                        with st.expander(f"⚠️ {len(failed_downloads)} files failed to download", expanded=False):
-                                            for failed in failed_downloads[:10]:
-                                                st.text(f"❌ {failed}")
-                                            if len(failed_downloads) > 10:
-                                                st.text(f"... and {len(failed_downloads) - 10} more")
-                                    
-                                    # Save preferred folder
-                                    st.session_state.preferred_sync_folder = folder_id
-                                    
-                                    # Clear sync state after successful completion
-                                    if 'sync_state' in st.session_state:
-                                        del st.session_state.sync_state
-                                    self._clear_sync_state()
+                                                    # Save state periodically (every 10 files)
+                                                    if (actual_index + 1) % 10 == 0:
+                                                        self._save_sync_state()
+                                                        
+                                                except Exception as e:
+                                                    failed_downloads.append(f"{doc['name']}: {str(e)}")
+                                                    sync_state['failed_files'] = failed_downloads
+                                                    continue
+                                        
+                                        # Step 3: Process into knowledge base
+                                        status_text.text("🧠 Processing documents into knowledge base...")
+                                        progress_bar.progress(0.8)
+                                        
+                                        # Import required modules for processing
+                                        from document_processor import DocumentProcessor
+                                        from embeddings_manager import EmbeddingsManager
+                                        from vector_db import VectorDatabase
+                                        
+                                        doc_processor = DocumentProcessor()
+                                        embeddings_manager = EmbeddingsManager(config.GEMINI_API_KEY)
+                                        vector_db = VectorDatabase(config.CHROMA_PERSIST_DIR)
+                                        
+                                        # Check for updates and process
+                                        from app import check_for_updates, process_updates
+                                        updates, removed_files, new_index = check_for_updates(
+                                            config, doc_processor, embeddings_manager, vector_db
+                                        )
+                                        
+                                        if updates:
+                                            status_text.text(f"🔄 Processing {len(updates)} documents...")
+                                            progress_bar.progress(0.9)
+                                            process_updates(updates, removed_files, new_index, 
+                                                          doc_processor, embeddings_manager, vector_db)
+                                        
+                                        # Complete
+                                        progress_bar.progress(1.0)
+                                        status_text.text("✅ Sync complete!")
+                                        
+                                        # Update final sync state
+                                        sync_state['status'] = 'completed'
+                                        sync_state['end_time'] = datetime.now().isoformat()
+                                        st.session_state.sync_state = sync_state
+                                        self._save_sync_state()
+                                        
+                                        # Success message
+                                        st.success(f"""
+                                        ✅ **Successfully synced {len(downloaded_files)} documents!**
+                                        
+                                        - Downloaded from: {selected_folder_name}
+                                        - Processed into knowledge base
+                                        - Ready for queries in main app
+                                        """)
+                                        
+                                        if failed_downloads:
+                                            with st.expander(f"⚠️ {len(failed_downloads)} files failed to download", expanded=False):
+                                                for failed in failed_downloads[:10]:
+                                                    st.text(f"❌ {failed}")
+                                                if len(failed_downloads) > 10:
+                                                    st.text(f"... and {len(failed_downloads) - 10} more")
+                                        
+                                        # Save preferred folder
+                                        st.session_state.preferred_sync_folder = folder_id
+                                        
+                                        # Clear sync state after successful completion
+                                        if 'sync_state' in st.session_state:
+                                            del st.session_state.sync_state
+                                        self._clear_sync_state()
                                 
                                 except Exception as e:
                                     # Handle timeout or other errors
