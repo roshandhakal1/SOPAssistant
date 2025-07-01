@@ -236,25 +236,77 @@ class CloudStorageUI:
         from config import Config
         config = Config()
         if config.GOOGLE_DRIVE_FOLDER_ID:
-            st.info(f"📂 **Configured Folder ID**: `{config.GOOGLE_DRIVE_FOLDER_ID}`")
-            st.caption("This folder will be used for auto-sync on startup.")
+            st.info(f"📂 **Main Folder**: Gemini Training (`{config.GOOGLE_DRIVE_FOLDER_ID}`)")
             
-            # Quick sync button for the configured folder
+            # Show subfolders in the main folder
             if self.gdrive.load_saved_credentials():
-                if st.button("🚀 Sync from Configured Folder", type="primary"):
-                    with st.spinner("Syncing from configured Google Drive folder..."):
-                        downloaded_files = self.gdrive.sync_folder(config.GOOGLE_DRIVE_FOLDER_ID, "./documents")
-                        if downloaded_files:
-                            st.success(f"✅ Synced {len(downloaded_files)} documents!")
+                st.subheader("📁 Choose Subfolder to Sync")
+                
+                # List subfolders
+                subfolders = self.gdrive.list_folders(config.GOOGLE_DRIVE_FOLDER_ID)
+                if subfolders:
+                    # Add option to sync main folder directly
+                    folder_options = {"📂 Main Folder (Gemini Training)": config.GOOGLE_DRIVE_FOLDER_ID}
+                    for folder in subfolders:
+                        folder_options[f"📁 {folder['name']}"] = folder['id']
+                    
+                    selected_sync_folder = st.selectbox(
+                        "Select folder to sync documents from:",
+                        options=list(folder_options.keys()),
+                        key="sync_folder_selection"
+                    )
+                    
+                    if selected_sync_folder:
+                        folder_id = folder_options[selected_sync_folder]
+                        
+                        # Show documents in selected folder
+                        documents = self.gdrive.list_documents(folder_id)
+                        if documents:
+                            st.info(f"📄 Found {len(documents)} documents in this folder")
                             
-                            # Show synced files with links
-                            with st.expander("View Synced Documents", expanded=True):
-                                for file_info in downloaded_files:
-                                    col1, col2 = st.columns([3, 1])
-                                    with col1:
-                                        st.text(f"📄 {Path(file_info['path']).name}")
-                                    with col2:
-                                        st.markdown(f"[Open in Drive]({file_info['gdrive_link']})")
+                            if st.button("🚀 Sync from Selected Folder", type="primary"):
+                                with st.spinner(f"Syncing from {selected_sync_folder}..."):
+                                    downloaded_files = self.gdrive.sync_folder(folder_id, "./documents")
+                                    if downloaded_files:
+                                        st.success(f"✅ Synced {len(downloaded_files)} documents!")
+                                        
+                                        # Save this folder as the preferred sync folder
+                                        st.session_state.preferred_sync_folder = folder_id
+                                        
+                                        # Show synced files with links
+                                        with st.expander("View Synced Documents", expanded=True):
+                                            for file_info in downloaded_files:
+                                                col1, col2 = st.columns([3, 1])
+                                                with col1:
+                                                    st.text(f"📄 {Path(file_info['path']).name}")
+                                                with col2:
+                                                    st.markdown(f"[Open in Drive]({file_info['gdrive_link']})")
+                        else:
+                            st.warning("No supported documents found in this folder")
+                            
+                            # Debug option for subfolders
+                            if st.button(f"🔍 Debug: Show All Files in {selected_sync_folder.split(' ')[-1]}", key=f"debug_{folder_id}"):
+                                try:
+                                    all_files = self.gdrive.service.files().list(
+                                        q=f"'{folder_id}' in parents",
+                                        fields="files(id, name, mimeType, size)"
+                                    ).execute()
+                                    
+                                    files = all_files.get('files', [])
+                                    if files:
+                                        st.write(f"**Found {len(files)} total files:**")
+                                        for file in files:
+                                            st.write(f"📄 **{file['name']}**")
+                                            st.write(f"   - Type: `{file.get('mimeType', 'unknown')}`")
+                                            size = int(file.get('size', 0)) if file.get('size') else 0
+                                            st.write(f"   - Size: {size/1024:.1f} KB")
+                                            st.write("---")
+                                    else:
+                                        st.write("**Folder is completely empty**")
+                                except Exception as e:
+                                    st.error(f"Error listing files: {e}")
+                else:
+                    st.warning("No subfolders found in the main folder")
         
         st.divider()
         

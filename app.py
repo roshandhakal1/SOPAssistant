@@ -440,9 +440,12 @@ def main():
                         
                         if gdrive.load_saved_credentials():
                             with st.spinner("🔄 Auto-syncing from Google Drive..."):
-                                downloaded_files = gdrive.sync_folder(config.GOOGLE_DRIVE_FOLDER_ID, config.SOP_FOLDER)
+                                # Use preferred sync folder if set, otherwise use main folder
+                                sync_folder_id = st.session_state.get('preferred_sync_folder', config.GOOGLE_DRIVE_FOLDER_ID)
+                                downloaded_files = gdrive.sync_folder(sync_folder_id, config.SOP_FOLDER)
                                 if downloaded_files:
-                                    st.success(f"✅ Auto-synced {len(downloaded_files)} documents from Google Drive!")
+                                    folder_name = "preferred subfolder" if sync_folder_id != config.GOOGLE_DRIVE_FOLDER_ID else "main folder"
+                                    st.success(f"✅ Auto-synced {len(downloaded_files)} documents from Google Drive ({folder_name})!")
                     except Exception as e:
                         st.warning("⚠️ Auto-sync failed. Manual upload available in Document Management.")
                 
