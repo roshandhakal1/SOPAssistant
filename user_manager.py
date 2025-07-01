@@ -246,18 +246,55 @@ class UserManager:
                     with st.expander("Can't click? Copy URL manually:", expanded=False):
                         st.code(st.session_state.auth_url)
                 
-                # Authorization code input
-                auth_code = st.text_input("📝 Paste authorization code here:", key="auth_code")
+                st.info("""
+                **After authorizing:**
+                1. You'll see a page with a code or get redirected to localhost
+                2. If redirected to localhost, copy the ENTIRE URL
+                3. Paste it below (we'll extract the code)
+                """)
                 
-                if auth_code and st.button("✅ Complete Connection"):
+                # Accept either code or full URL
+                auth_input = st.text_area("📝 Paste authorization code OR full redirect URL:", 
+                                         key="auth_input",
+                                         height=100,
+                                         placeholder="Either:\n- 4/0AQlEd8w-vniMX...\nOR\n- http://localhost/?state=...&code=4/0AQlEd8w-vniMX...")
+                
+                if auth_input and st.button("✅ Complete Connection"):
                     try:
-                        if self._complete_google_auth(auth_code):
+                        # Extract code from input
+                        clean_code = auth_input.strip()
+                        
+                        # Check if it's a full URL
+                        if 'code=' in clean_code:
+                            # Extract code from URL
+                            import urllib.parse
+                            parsed = urllib.parse.urlparse(clean_code)
+                            params = urllib.parse.parse_qs(parsed.query)
+                            if 'code' in params:
+                                clean_code = params['code'][0]
+                            else:
+                                st.error("❌ No authorization code found in URL")
+                                st.stop()
+                        
+                        # Try authentication
+                        if self._complete_google_auth(clean_code):
                             st.success("🎉 Connected successfully!")
                             st.rerun()
                         else:
-                            st.error("❌ Authorization failed. Please check your code and try again.")
+                            st.error("❌ Authorization failed. Please try again with a fresh authorization link.")
+                            # Clear the flow to force regeneration
+                            if 'oauth_flow' in st.session_state:
+                                del st.session_state.oauth_flow
+                            if 'auth_url' in st.session_state:
+                                del st.session_state.auth_url
                     except Exception as e:
-                        st.error(f"❌ Authorization failed: {str(e)}")
+                        st.error(f"❌ Error: {str(e)}")
+                        # Clear the flow to force regeneration
+                        if 'oauth_flow' in st.session_state:
+                            del st.session_state.oauth_flow
+                        if 'auth_url' in st.session_state:
+                            del st.session_state.auth_url
+                        st.info("🔄 Please click 'Connect Google Drive' to generate a new authorization link.")
     
     def _start_google_auth(self, config_json: str):
         """Start Google OAuth flow - use the WORKING method from cloud_storage.py"""
