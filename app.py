@@ -49,38 +49,131 @@ def initialize_components():
     return config, doc_processor, embeddings_manager, vector_db, session_doc_handler, chat_history_manager
 
 def handle_unified_chat_input(multi_expert_system):
-    """Unified chat input with expert quick reference"""
+    """Unified chat input with smart @mention autocomplete"""
+    
+    # Initialize session state
+    if 'chat_input_text' not in st.session_state:
+        st.session_state.chat_input_text = ""
+    if 'show_expert_suggestions' not in st.session_state:
+        st.session_state.show_expert_suggestions = False
+    if 'current_at_position' not in st.session_state:
+        st.session_state.current_at_position = -1
     
     available_experts = multi_expert_system.get_available_experts()
     
-    # Show a compact expert reference above the chat input
-    with st.expander("🎯 Quick Expert Reference - Click to expand", expanded=False):
-        st.markdown("**Available Experts (Copy and paste the @mention in your message):**")
+    # Custom text area that can detect @ and show suggestions
+    st.markdown("### 💬 Ask your question:")
+    
+    # Text area for input
+    user_input = st.text_area(
+        "Your message:",
+        value=st.session_state.chat_input_text,
+        placeholder="Ask about your SOPs or type @ to see expert suggestions...",
+        height=100,
+        key="smart_chat_input",
+        label_visibility="collapsed"
+    )
+    
+    # Update session state
+    st.session_state.chat_input_text = user_input
+    
+    # Check for @ mentions and show suggestions
+    if "@" in user_input:
+        # Find the last @ position
+        last_at_pos = user_input.rfind("@")
         
-        # Create a clean, copy-friendly list
-        expert_list = list(available_experts.items())
+        # Get text after the last @
+        text_after_at = ""
+        if last_at_pos + 1 < len(user_input):
+            remaining_text = user_input[last_at_pos + 1:]
+            # Get the partial expert name (until space or end)
+            text_after_at = remaining_text.split()[0] if remaining_text.split() else remaining_text
         
-        # Show in 2 columns for better visibility
-        col1, col2 = st.columns(2)
+        # Only show suggestions if @ is at word boundary and incomplete
+        at_word_boundary = (last_at_pos == 0 or user_input[last_at_pos - 1] in [" ", "\n"])
         
-        for i, (expert_name, expert_info) in enumerate(expert_list):
-            target_col = col1 if i % 2 == 0 else col2
+        if at_word_boundary and (not text_after_at or not any(text_after_at.lower() == expert.lower() for expert in available_experts.keys())):
+            # Filter experts based on partial typing
+            matching_experts = []
+            for expert_name, expert_info in available_experts.items():
+                if text_after_at.lower() in expert_name.lower():
+                    matching_experts.append((expert_name, expert_info))
             
-            with target_col:
-                # Show @mention in a copyable format
-                st.code(f"@{expert_name}", language=None)
-                st.caption(f"🏷️ {expert_info['title'][:35]}{'...' if len(expert_info['title']) > 35 else ''}")
-                st.caption(f"📋 {', '.join(expert_info['specializations'][:2])}")
-                if i < len(expert_list) - 1:
-                    st.markdown("---")
+            if matching_experts:
+                st.markdown("**🎯 Expert Suggestions:**")
+                st.caption("Click an expert to complete your @mention")
+                
+                # Show matching experts as clickable buttons
+                for i in range(0, len(matching_experts), 3):
+                    cols = st.columns(3)
+                    for j, col in enumerate(cols):
+                        if i + j < len(matching_experts):
+                            expert_name, expert_info = matching_experts[i + j]
+                            with col:
+                                if st.button(
+                                    f"@{expert_name}",
+                                    key=f"suggest_{expert_name}_{i}_{j}",
+                                    help=f"{expert_info['title']}\n{', '.join(expert_info['specializations'][:2])}",
+                                    use_container_width=True
+                                ):
+                                    # Replace the incomplete @mention with the selected expert
+                                    before_at = user_input[:last_at_pos]
+                                    after_mention = user_input[last_at_pos + 1 + len(text_after_at):]
+                                    new_text = f"{before_at}@{expert_name} {after_mention}".strip()
+                                    st.session_state.chat_input_text = new_text
+                                    st.rerun()
+                
+                st.markdown("---")
+    
+    # Send button and actions
+    col1, col2, col3 = st.columns([1, 1, 2])
+    
+    with col1:
+        send_clicked = st.button("🚀 Send", type="primary", use_container_width=True)
+    
+    with col2:
+        clear_clicked = st.button("🗑️ Clear", use_container_width=True)
+    
+    with col3:
+        # Show mentioned experts
+        mentioned_experts = []
+        if user_input:
+            import re
+            mentions = re.findall(r'@(\w+)', user_input)
+            for mention in mentions:
+                for expert_name in available_experts.keys():
+                    if mention.lower() == expert_name.lower():
+                        if expert_name not in mentioned_experts:
+                            mentioned_experts.append(expert_name)
+                        break
         
-        st.info("💡 **How to use:** Copy any @mention above (like `@QualityExpert`) and paste it in your message below.")
+        if mentioned_experts:
+            expert_names = [multi_expert_system.experts[name].name for name in mentioned_experts]
+            st.info(f"👥 **Will consult:** {', '.join(expert_names)}")
     
-    # Regular chat input with helpful placeholder
-    placeholder = "Ask about your SOPs or @mention experts for specialized insights..."
-    user_input = st.chat_input(placeholder)
+    # Handle actions
+    if clear_clicked:
+        st.session_state.chat_input_text = ""
+        st.rerun()
     
-    return user_input
+    if send_clicked and user_input.strip():
+        # Clear the input and return the message
+        st.session_state.chat_input_text = ""
+        return user_input.strip()
+    
+    # Also handle Enter key in text area (for convenience)
+    if user_input != st.session_state.get('last_input_value', '') and user_input.strip():
+        # Check if this looks like a complete question
+        if user_input.strip().endswith(('?', '.', '!')) and len(user_input.strip()) > 10:
+            st.session_state.last_input_value = user_input
+            # Auto-submit on Enter with complete question
+            if st.button("↵ Press to send", key="auto_submit_hint"):
+                st.session_state.chat_input_text = ""
+                return user_input.strip()
+        else:
+            st.session_state.last_input_value = user_input
+    
+    return None
 
 def handle_expert_chat_input_deprecated(multi_expert_system):
     """Handle chat input with expert autocomplete functionality"""
