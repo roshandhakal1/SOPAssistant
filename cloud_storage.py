@@ -58,13 +58,21 @@ class GoogleDriveManager:
             }
             st.session_state.gdrive_credentials = cred_data
             
-            # Save to file for persistence across sessions
+            # Save to multiple persistent locations
             try:
                 import json
+                # Try file storage
                 with open('.gdrive_credentials.json', 'w') as f:
                     json.dump(cred_data, f)
-            except Exception:
-                pass  # Ignore file save errors
+                    
+                # Also try Streamlit secrets (if available)
+                if hasattr(st, 'secrets'):
+                    # Store in a way that persists across deployments
+                    import os
+                    os.environ['GDRIVE_CREDENTIALS'] = json.dumps(cred_data)
+                    
+            except Exception as e:
+                st.warning(f"Could not save credentials persistently: {e}")
             return True
         except Exception as e:
             st.error(f"Authentication failed: {str(e)}")
@@ -78,15 +86,35 @@ class GoogleDriveManager:
         if 'gdrive_credentials' in st.session_state:
             cred_data = st.session_state.gdrive_credentials
         else:
-            # Try loading from file
-            try:
-                import json
-                with open('.gdrive_credentials.json', 'r') as f:
-                    cred_data = json.load(f)
-                    # Also save to session state
+            # Try multiple storage locations
+            import json
+            import os
+            
+            # Try environment variable (works on cloud deployments)
+            if 'GDRIVE_CREDENTIALS' in os.environ:
+                try:
+                    cred_data = json.loads(os.environ['GDRIVE_CREDENTIALS'])
                     st.session_state.gdrive_credentials = cred_data
-            except Exception:
-                pass
+                except Exception:
+                    pass
+            
+            # Try file storage (fallback)
+            if not cred_data:
+                try:
+                    with open('.gdrive_credentials.json', 'r') as f:
+                        cred_data = json.load(f)
+                        st.session_state.gdrive_credentials = cred_data
+                except Exception:
+                    pass
+            
+            # Try Streamlit secrets (if available)
+            if not cred_data:
+                try:
+                    if hasattr(st, 'secrets') and 'gdrive_credentials' in st.secrets:
+                        cred_data = dict(st.secrets.gdrive_credentials)
+                        st.session_state.gdrive_credentials = cred_data
+                except Exception:
+                    pass
         
         if cred_data:
             self.credentials = Credentials(
@@ -347,34 +375,61 @@ class CloudStorageUI:
             5. Download the JSON file and paste content below
             """)
         
-        # Client configuration input
-        client_config_text = st.text_area(
-            "Paste your OAuth 2.0 client configuration (JSON):",
-            placeholder='{"installed":{"client_id":"...","client_secret":"...","auth_uri":"...","token_uri":"..."}}',
-            height=150
-        )
+        # Check if client config is in environment variables
+        import os
+        env_client_config = os.getenv('GDRIVE_CLIENT_CONFIG')
         
-        if client_config_text and st.button("🔐 Start Authentication"):
+        if env_client_config:
+            st.success("✅ OAuth client configuration found in environment variables")
             try:
-                client_config = json.loads(client_config_text)
-                auth_url, flow = self.gdrive.setup_oauth_flow(client_config)
-                
-                # Store flow in session state
-                st.session_state.oauth_flow = flow
-                st.session_state.client_config = client_config
-                
-                st.success("✅ Configuration valid!")
-                st.markdown(f"**[Click here to authorize access]({auth_url})**")
-                st.info("After authorizing, you'll see a code. Copy and paste it below:")
-                
-                # Also show the URL in case the link doesn't work
-                with st.expander("Having trouble? Copy this URL manually:", expanded=False):
-                    st.code(auth_url, language=None)
-                
-            except json.JSONDecodeError:
-                st.error("❌ Invalid JSON format")
+                import json
+                client_config = json.loads(env_client_config)
+                if st.button("🔐 Use Environment Configuration"):
+                    auth_url, flow = self.gdrive.setup_oauth_flow(client_config)
+                    
+                    # Store flow in session state
+                    st.session_state.oauth_flow = flow
+                    st.session_state.client_config = client_config
+                    
+                    st.success("✅ Configuration loaded!")
+                    st.markdown(f"**[Click here to authorize access]({auth_url})**")
+                    st.info("Copy the authorization code from the browser and paste it below:")
+                    
+                    # Also show the URL in case the link doesn't work
+                    with st.expander("Having trouble? Copy this URL manually:", expanded=False):
+                        st.code(auth_url, language=None)
             except Exception as e:
-                st.error(f"❌ Configuration error: {str(e)}")
+                st.error(f"Invalid environment configuration: {e}")
+        else:
+            # Manual client configuration input
+            st.info("💡 For persistent authentication, add GDRIVE_CLIENT_CONFIG to environment variables")
+            client_config_text = st.text_area(
+                "Paste your OAuth 2.0 client configuration (JSON):",
+                placeholder='{"installed":{"client_id":"...","client_secret":"...","auth_uri":"...","token_uri":"..."}}',
+                height=150
+            )
+            
+            if client_config_text and st.button("🔐 Start Authentication"):
+                try:
+                    client_config = json.loads(client_config_text)
+                    auth_url, flow = self.gdrive.setup_oauth_flow(client_config)
+                    
+                    # Store flow in session state
+                    st.session_state.oauth_flow = flow
+                    st.session_state.client_config = client_config
+                    
+                    st.success("✅ Configuration valid!")
+                    st.markdown(f"**[Click here to authorize access]({auth_url})**")
+                    st.info("After authorizing, you'll see a code. Copy and paste it below:")
+                    
+                    # Also show the URL in case the link doesn't work
+                    with st.expander("Having trouble? Copy this URL manually:", expanded=False):
+                        st.code(auth_url, language=None)
+                        
+                except json.JSONDecodeError:
+                    st.error("❌ Invalid JSON format")
+                except Exception as e:
+                    st.error(f"❌ Configuration error: {str(e)}")
         
         # Authorization code input
         if 'oauth_flow' in st.session_state:
