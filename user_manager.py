@@ -196,16 +196,148 @@ class UserManager:
             # CONNECTED STATE
             st.success("✅ Google Drive Connected")
             
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.write("📂 Ready to sync documents from Google Drive")
-                st.write("💡 Go to main app → Document Management to select folders")
+            # Disconnect button
+            if st.button("🔓 Disconnect", type="secondary", key="gdrive_disconnect"):
+                self._disconnect_google_drive()
+                st.success("✅ Disconnected!")
+                st.rerun()
             
-            with col2:
-                if st.button("🔓 Disconnect", type="secondary", key="gdrive_disconnect"):
-                    self._disconnect_google_drive()
-                    st.success("✅ Disconnected!")
-                    st.rerun()
+            st.divider()
+            
+            # Folder selection and sync
+            try:
+                from cloud_storage import GoogleDriveManager
+                from config import Config
+                import shutil
+                from pathlib import Path
+                
+                gdrive = GoogleDriveManager()
+                config = Config()
+                
+                if gdrive.load_saved_credentials():
+                    st.markdown("### 📁 Select Folder to Sync")
+                    
+                    # Get folders from main Google Drive folder
+                    if config.GOOGLE_DRIVE_FOLDER_ID:
+                        with st.spinner("Loading folders..."):
+                            # Get subfolders
+                            subfolders = gdrive.list_folders(config.GOOGLE_DRIVE_FOLDER_ID)
+                            
+                            # Create folder options
+                            folder_options = {
+                                "📂 Main Folder (Gemini Training)": config.GOOGLE_DRIVE_FOLDER_ID
+                            }
+                            
+                            for folder in subfolders:
+                                folder_options[f"📁 {folder['name']}"] = folder['id']
+                        
+                        # Folder selection
+                        selected_folder_name = st.selectbox(
+                            "Choose folder to sync:",
+                            options=list(folder_options.keys()),
+                            key="integration_folder_select"
+                        )
+                        
+                        if selected_folder_name:
+                            folder_id = folder_options[selected_folder_name]
+                            
+                            # Get document count with progress
+                            with st.spinner(f"Counting documents in {selected_folder_name}..."):
+                                documents = gdrive.list_documents(folder_id)
+                            
+                            st.info(f"📄 **{len(documents)} documents** found in {selected_folder_name}")
+                            
+                            # Sync button
+                            if st.button("🚀 Sync Documents to Knowledge Base", type="primary", 
+                                       disabled=len(documents) == 0):
+                                # Progress tracking
+                                progress_container = st.container()
+                                
+                                with progress_container:
+                                    progress_bar = st.progress(0)
+                                    status_text = st.empty()
+                                    
+                                    # Step 1: Clear existing documents
+                                    status_text.text("🗑️ Clearing existing documents...")
+                                    progress_bar.progress(0.1)
+                                    
+                                    if Path(config.SOP_FOLDER).exists():
+                                        shutil.rmtree(config.SOP_FOLDER)
+                                    Path(config.SOP_FOLDER).mkdir(parents=True, exist_ok=True)
+                                    
+                                    # Step 2: Download documents
+                                    status_text.text(f"📥 Downloading {len(documents)} documents...")
+                                    progress_bar.progress(0.2)
+                                    
+                                    downloaded_files = []
+                                    for i, doc in enumerate(documents):
+                                        # Update progress
+                                        progress = 0.2 + (0.5 * (i + 1) / len(documents))
+                                        progress_bar.progress(progress)
+                                        status_text.text(f"📥 Downloading {i+1}/{len(documents)}: {doc['name'][:50]}...")
+                                        
+                                        # Download file
+                                        file_info = gdrive.download_file(doc['id'], doc['name'], config.SOP_FOLDER)
+                                        if file_info:
+                                            downloaded_files.append(file_info)
+                                    
+                                    # Step 3: Process into knowledge base
+                                    status_text.text("🧠 Processing documents into knowledge base...")
+                                    progress_bar.progress(0.8)
+                                    
+                                    # Import required modules for processing
+                                    from document_processor import DocumentProcessor
+                                    from embeddings_manager import EmbeddingsManager
+                                    from vector_db import VectorDatabase
+                                    
+                                    doc_processor = DocumentProcessor()
+                                    embeddings_manager = EmbeddingsManager(config.GEMINI_API_KEY)
+                                    vector_db = VectorDatabase(config.CHROMA_PERSIST_DIR)
+                                    
+                                    # Check for updates and process
+                                    from app import check_for_updates, process_updates
+                                    updates, removed_files, new_index = check_for_updates(
+                                        config, doc_processor, embeddings_manager, vector_db
+                                    )
+                                    
+                                    if updates:
+                                        status_text.text(f"🔄 Processing {len(updates)} documents...")
+                                        progress_bar.progress(0.9)
+                                        process_updates(updates, removed_files, new_index, 
+                                                      doc_processor, embeddings_manager, vector_db)
+                                    
+                                    # Complete
+                                    progress_bar.progress(1.0)
+                                    status_text.text("✅ Sync complete!")
+                                    
+                                    # Success message
+                                    st.success(f"""
+                                    ✅ **Successfully synced {len(downloaded_files)} documents!**
+                                    
+                                    - Downloaded from: {selected_folder_name}
+                                    - Processed into knowledge base
+                                    - Ready for queries in main app
+                                    """)
+                                    
+                                    # Save preferred folder
+                                    st.session_state.preferred_sync_folder = folder_id
+                            
+                            # Show sample files
+                            if documents and len(documents) > 0:
+                                with st.expander("📋 Preview files in folder", expanded=False):
+                                    for i, doc in enumerate(documents[:10]):
+                                        st.text(f"📄 {doc['name']}")
+                                    if len(documents) > 10:
+                                        st.text(f"... and {len(documents) - 10} more files")
+                    else:
+                        st.error("❌ No Google Drive folder configured")
+                else:
+                    st.error("❌ Failed to load Google Drive credentials")
+                    
+            except Exception as e:
+                st.error(f"❌ Error: {str(e)}")
+                import traceback
+                st.code(traceback.format_exc())
         
         else:
             # NOT CONNECTED STATE  
