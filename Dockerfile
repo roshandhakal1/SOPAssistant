@@ -4,12 +4,15 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies for document processing
+# antiword and catdoc are for .doc file support on Linux
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     software-properties-common \
     git \
+    antiword \
+    catdoc \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
