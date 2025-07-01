@@ -144,11 +144,14 @@ class GoogleDriveManager:
             # Query for supported document types
             mime_types = [
                 "application/pdf",
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                "application/msword",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # .docx
+                "application/msword",  # .doc
                 "text/csv",
                 "text/markdown",
-                "text/plain"
+                "text/plain",
+                "application/vnd.google-apps.document",  # Google Docs
+                "application/rtf",  # RTF files
+                "application/vnd.oasis.opendocument.text"  # ODT files
             ]
             
             query = f"'{folder_id}' in parents and ("
@@ -387,6 +390,28 @@ class CloudStorageUI:
                             st.error("❌ No documents were synced")
             else:
                 st.warning("No supported documents found in this folder")
+                
+                # Debug: Show all files in folder
+                if st.button("🔍 Debug: Show All Files in Folder"):
+                    try:
+                        all_files = self.service.files().list(
+                            q=f"'{folder_id}' in parents",
+                            fields="files(id, name, mimeType, size)"
+                        ).execute()
+                        
+                        files = all_files.get('files', [])
+                        if files:
+                            st.write(f"**Found {len(files)} total files:**")
+                            for file in files:
+                                st.write(f"📄 **{file['name']}**")
+                                st.write(f"   - Type: `{file.get('mimeType', 'unknown')}`")
+                                size = int(file.get('size', 0)) if file.get('size') else 0
+                                st.write(f"   - Size: {size/1024:.1f} KB")
+                                st.write("---")
+                        else:
+                            st.write("**Folder is completely empty**")
+                    except Exception as e:
+                        st.error(f"Error listing files: {e}")
         
         # Auto-sync option
         if 'gdrive_sync_folder' in st.session_state:
