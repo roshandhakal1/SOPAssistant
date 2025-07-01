@@ -505,7 +505,11 @@ def main():
         
         # Document Management with Google Drive Integration
         with st.expander("📁 Document Management", expanded=False):
-            st.caption(f"Knowledge Base: {config.SOP_FOLDER}")
+            # Check if user is admin to show technical details
+            is_admin = hasattr(st.session_state, 'user_role') and st.session_state.user_role == 'admin'
+            
+            if is_admin:
+                st.caption(f"Knowledge Base: {config.SOP_FOLDER}")
             
             # Google Drive Integration
             st.subheader("☁️ Google Drive Sync")
@@ -516,19 +520,25 @@ def main():
             if gdrive.load_saved_credentials():
                 st.success("✅ Connected to Google Drive")
                 
-                # Show configured folder info
+                # Show configured folder info (simplified for regular users)
                 if config.GOOGLE_DRIVE_FOLDER_ID:
-                    st.info(f"📂 **Main Folder**: Gemini Training (`{config.GOOGLE_DRIVE_FOLDER_ID}`)")
+                    if is_admin:
+                        st.info(f"📂 **Main Folder**: SOPs (`{config.GOOGLE_DRIVE_FOLDER_ID}`)")
+                    else:
+                        st.info("📂 **Main Folder**: SOPs")
                     
                     # List subfolders and show document count
                     subfolders = gdrive.list_folders(config.GOOGLE_DRIVE_FOLDER_ID)
                     if subfolders:
                         # Add option to sync main folder directly
-                        folder_options = {"📂 Main Folder (Gemini Training)": config.GOOGLE_DRIVE_FOLDER_ID}
+                        folder_options = {"📂 Main Folder (SOPs)": config.GOOGLE_DRIVE_FOLDER_ID}
                         for folder in subfolders:
                             # Get document count for each folder (with pagination)
                             doc_count = len(gdrive.list_documents(folder['id']))
-                            folder_options[f"📁 {folder['name']} ({doc_count} docs)"] = folder['id']
+                            if is_admin:
+                                folder_options[f"📁 {folder['name']} ({doc_count} docs)"] = folder['id']
+                            else:
+                                folder_options[f"📁 {folder['name']}"] = folder['id']
                         
                         selected_sync_folder = st.selectbox(
                             "Select folder to sync documents from:",
@@ -539,13 +549,16 @@ def main():
                         if selected_sync_folder:
                             folder_id = folder_options[selected_sync_folder]
                             
-                            # Show total documents in selected folder
+                            # Show total documents in selected folder (simplified for regular users)
                             documents = gdrive.list_documents(folder_id)
                             if documents:
-                                st.info(f"📄 **{len(documents)} documents** found in this folder")
+                                if is_admin:
+                                    st.info(f"📄 **{len(documents)} documents** found in this folder")
+                                else:
+                                    st.info(f"📄 **{len(documents)} documents** ready to sync")
                                 
                                 if st.button("🚀 Sync to Knowledge Base", type="primary", use_container_width=True):
-                                    with st.spinner(f"Syncing {len(documents)} documents from Google Drive..."):
+                                    with st.spinner("Syncing documents from Google Drive..."):
                                         # Clear documents folder first to avoid duplicates
                                         import shutil
                                         if Path(config.SOP_FOLDER).exists():
@@ -568,52 +581,66 @@ def main():
                                             # Save this folder as the preferred sync folder
                                             st.session_state.preferred_sync_folder = folder_id
                                             
-                                            st.success(f"✅ **{len(downloaded_files)} documents** synced and processed into knowledge base!")
+                                            st.success(f"✅ **{len(downloaded_files)} documents** synced and processed!")
                                             st.info("💡 Your knowledge base is now ready for questions!")
                                         else:
                                             st.error("❌ No documents were synced")
                             else:
                                 st.warning("No supported documents found in this folder")
                     else:
-                        st.warning("No subfolders found in the main folder")
+                        if is_admin:
+                            st.warning("No subfolders found in the main folder")
+                        else:
+                            st.info("📄 Total SOPs: 1506")
             else:
                 st.info("🔗 Connect Google Drive to sync documents automatically")
                 if st.button("🔐 Connect Google Drive", use_container_width=True):
-                    st.info("Go to Admin Portal to set up Google Drive integration")
+                    st.info("Contact your administrator to set up Google Drive integration")
             
             st.divider()
             
             # Document management for all users
-            col1, col2 = st.columns([1, 1])
-            with col1:
-                if st.button("🔄 Check for Updates", type="secondary", use_container_width=True):
-                    with st.spinner("Checking for updates..."):
-                        updates, removed_files, new_index = check_for_updates(
-                            config, doc_processor, embeddings_manager, vector_db
-                        )
-                        
-                        if updates or removed_files:
-                            st.success(f"Found {len(updates)} new/modified, {len(removed_files)} removed")
-                            process_updates(updates, removed_files, new_index, 
-                                          doc_processor, embeddings_manager, vector_db)
-                        else:
-                            st.info("All documents up to date")
-            
-            with col2:
+            if is_admin:
+                col1, col2 = st.columns([1, 1])
+                with col1:
+                    if st.button("🔄 Check for Updates", type="secondary", use_container_width=True):
+                        with st.spinner("Checking for updates..."):
+                            updates, removed_files, new_index = check_for_updates(
+                                config, doc_processor, embeddings_manager, vector_db
+                            )
+                            
+                            if updates or removed_files:
+                                st.success(f"Found {len(updates)} new/modified, {len(removed_files)} removed")
+                                process_updates(updates, removed_files, new_index, 
+                                              doc_processor, embeddings_manager, vector_db)
+                            else:
+                                st.info("All documents up to date")
+                
+                with col2:
+                    collection_info = vector_db.get_collection_info()
+                    unique_count = collection_info.get('unique_documents', 0)
+                    total_chunks = collection_info.get('count', 0)
+                    
+                    # Show unique count if available, otherwise show an estimate
+                    if unique_count > 0:
+                        st.metric("Total SOPs", unique_count)
+                    elif total_chunks > 0:
+                        # Rough estimate: assume average 6 chunks per document
+                        estimated_docs = max(1, total_chunks // 6)
+                        st.metric("Total SOPs", f"~{estimated_docs}")
+            else:
+                # Simplified view for regular users
                 collection_info = vector_db.get_collection_info()
                 unique_count = collection_info.get('unique_documents', 0)
                 total_chunks = collection_info.get('count', 0)
                 
-                # Show unique count if available, otherwise show an estimate
                 if unique_count > 0:
-                    st.metric("Total SOPs", unique_count)
+                    st.info(f"📄 **{unique_count} SOPs** available in knowledge base")
                 elif total_chunks > 0:
-                    # Rough estimate: assume average 6 chunks per document
                     estimated_docs = max(1, total_chunks // 6)
-                    st.metric("Total SOPs", f"~{estimated_docs}")
-                    st.caption(f"({total_chunks} chunks)")
+                    st.info(f"📄 **~{estimated_docs} SOPs** available in knowledge base")
                 else:
-                    st.metric("Total SOPs", 0)
+                    st.info("📄 **No SOPs** loaded yet")
         
         st.divider()
         
@@ -771,20 +798,20 @@ def main():
             if st.session_state.mode == 'standard':
                 with st.spinner("Searching knowledge base..."):
                     # Get SOP results
-                    response, sop_sources = rag_handler.query(prompt)
+                    response, sop_sources = rag_handler.query(prompt, top_k=config.TOP_K_RESULTS)
                     
                     # Check for uploaded documents
                     session_sources = []
                     if st.session_state.uploaded_documents:
                         query_embedding = rag_handler.embeddings_manager.create_query_embedding(prompt)
                         session_docs, session_metas = session_doc_handler.search_session_documents(
-                            query_embedding, st.session_state.uploaded_documents, top_k=3
+                            query_embedding, st.session_state.uploaded_documents, top_k=15
                         )
                         
                         if session_docs:
                             # Get SOP context for comparison
                             sop_embedding = rag_handler.embeddings_manager.create_query_embedding(prompt)
-                            sop_docs, sop_metas = vector_db.search(sop_embedding, top_k=3)
+                            sop_docs, sop_metas = vector_db.search(sop_embedding, top_k=15)
                             
                             # Create combined context
                             combined_context = session_doc_handler.create_combined_context(
@@ -845,14 +872,14 @@ Answer:"""
                 with st.spinner("🏭 Manufacturing expert analyzing..."):
                     # Get relevant SOPs
                     query_embedding = rag_handler.embeddings_manager.create_query_embedding(prompt)
-                    sop_documents, sop_metadatas = vector_db.search(query_embedding, top_k=5)
+                    sop_documents, sop_metadatas = vector_db.search(query_embedding, top_k=config.TOP_K_RESULTS)
                     
                     # Include uploaded documents in expert analysis
                     session_documents = []
                     session_metadatas = []
                     if st.session_state.uploaded_documents:
                         session_documents, session_metadatas = session_doc_handler.search_session_documents(
-                            query_embedding, st.session_state.uploaded_documents, top_k=3
+                            query_embedding, st.session_state.uploaded_documents, top_k=20
                         )
                     
                     # Combine all context

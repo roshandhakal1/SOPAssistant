@@ -10,7 +10,7 @@ class RAGHandler:
         self.model = genai.GenerativeModel(model_name)
         self.vector_db = vector_db
         self.embeddings_manager = EmbeddingsManager(api_key)
-        self.top_k = 5
+        self.top_k = 50  # Maximum comprehensive SOP coverage for 1500+ documents
         self.abbreviation_mapper = AbbreviationMapper()
         self.model_name = model_name
     
@@ -26,9 +26,10 @@ class RAGHandler:
         all_metadatas = []
         seen_ids = set()  # Track unique documents
         
-        for query_variant in query_variations[:3]:  # Limit to top 3 variations to avoid too many searches
+        for query_variant in query_variations[:8]:  # Maximum query variations for comprehensive coverage
             query_embedding = self.embeddings_manager.create_query_embedding(query_variant)
-            documents, metadatas = self.vector_db.search(query_embedding, top_k=top_k)
+            # Search with increased results per variation to get comprehensive coverage
+            documents, metadatas = self.vector_db.search(query_embedding, top_k=min(top_k * 3, 100))
             
             # Add unique results
             for doc, meta in zip(documents, metadatas):
@@ -38,17 +39,20 @@ class RAGHandler:
                     all_documents.append(doc)
                     all_metadatas.append(meta)
         
-        # If no results from expanded queries, try original query
+        # If no results from expanded queries, try original query with higher results
         if not all_documents:
             query_embedding = self.embeddings_manager.create_query_embedding(question)
-            all_documents, all_metadatas = self.vector_db.search(query_embedding, top_k=top_k)
+            all_documents, all_metadatas = self.vector_db.search(query_embedding, top_k=min(top_k * 3, 100))
         
         if not all_documents:
             return "I couldn't find any relevant information in the SOPs to answer your question. Try using full terms instead of abbreviations (e.g., 'accounts payable' instead of 'AP').", []
         
-        # Limit to top k results
-        documents = all_documents[:top_k]
-        metadatas = all_metadatas[:top_k]
+        # For maximum comprehensive search, use as many results as possible within token limits
+        # Allow up to 4x the top_k to capture maximum relevant documents from all query variations
+        # With 1500+ SOPs, aim for 100-200 document chunks for truly comprehensive answers
+        max_results = min(len(all_documents), top_k * 4, 200)  # Cap at 200 for performance
+        documents = all_documents[:max_results]
+        metadatas = all_metadatas[:max_results]
         
         context = self._format_context(documents, metadatas)
         
@@ -57,24 +61,80 @@ class RAGHandler:
         if len(query_variations) > 1:
             expansion_note = f"\nNote: Searched for variations including: {', '.join(query_variations[:3])}"
         
-        prompt = f"""You are a helpful assistant that answers questions based on Standard Operating Procedures (SOPs).{expansion_note}
+        prompt = f"""You are a comprehensive manufacturing assistant with access to an extensive knowledge base of Standard Operating Procedures (SOPs).{expansion_note}
 
-Context from SOPs:
+COMPREHENSIVE SOP CONTEXT ({len(documents)} relevant documents from your knowledge base):
 {context}
 
-Question: {question}
+QUERY: {question}
 
-Instructions:
-1. Answer the question comprehensively based on the provided SOP context
-2. Be specific and cite the relevant SOP titles when referencing information (use plain text, no HTML)
-3. If the context doesn't contain enough information to fully answer the question, say so
-4. Structure your answer clearly with bullet points or numbered lists when appropriate
-5. For questions about processes or lifecycles, list ALL steps in order with detailed explanations
-6. Provide thorough, detailed responses - do not summarize or abbreviate unless asked
-7. Include all relevant details, procedures, requirements, and considerations from the SOPs
-8. Use plain text formatting only - no HTML tags or special formatting
+FORMATTING AND RESPONSE INSTRUCTIONS:
 
-Answer:"""
+**CRITICAL FORMATTING REQUIREMENTS:**
+- Use clear headings with ## for main sections and ### for subsections
+- Each bullet point (•) must be on its own separate line
+- Add blank lines between bullet points for better readability
+- Start each bullet point with a **bold category or key term**
+- Group related information under logical section headings
+- Use **bold text** for important terms, processes, and requirements
+- Separate different aspects of the topic into distinct sections
+- Never combine multiple bullet points into one paragraph
+
+**COMPREHENSIVE ANALYSIS REQUIREMENTS:**
+1. **MAXIMUM THOROUGHNESS**: Analyze ALL {len(documents)} provided documents comprehensively
+2. **MULTI-SOP SYNTHESIS**: Cross-reference and synthesize information across ALL relevant SOPs
+3. **COMPLETE COVERAGE**: Include all relevant procedures, requirements, and details
+4. **DETAILED CITATIONS**: Cite specific SOP titles in quotes after each point
+5. **STRUCTURED ORGANIZATION**: Organize into clear sections with descriptive headings
+
+**REQUIRED RESPONSE FORMAT:**
+
+## [Main Topic/Process Name]
+
+### Key Requirements
+
+• **[Category 1]**: [Detailed requirement description] ("[SOP Name]")
+
+• **[Category 2]**: [Detailed requirement description] ("[SOP Name]", "[SOP Name]")
+
+• **[Category 3]**: [Detailed requirement description] ("[SOP Name]")
+
+### Step-by-Step Process
+
+• **Step 1**: [Detailed description with specific actions] ("[SOP Name]")
+
+• **Step 2**: [Detailed description with specific actions] ("[SOP Name]")
+
+• **Step 3**: [Detailed description with specific actions] ("[SOP Name]")
+
+### Safety and Compliance
+
+• **[Safety Category]**: [Detailed safety requirement] ("[SOP Name]")
+
+• **[Compliance Area]**: [Detailed compliance requirement] ("[SOP Name]")
+
+• **[Additional Safety]**: [Additional safety measures] ("[SOP Name]")
+
+### Quality Control
+
+• **[QC Process]**: [Detailed quality control requirement] ("[SOP Name]")
+
+• **[Verification]**: [Verification requirement details] ("[SOP Name]")
+
+### Documentation Requirements
+
+• **[Document Type]**: [Specific documentation requirement] ("[SOP Name]")
+
+• **[Record Keeping]**: [Record keeping requirement] ("[SOP Name]")
+
+**CRITICAL FORMATTING RULES:**
+- Each bullet point must be on its own line with proper spacing
+- Use double line breaks between bullet points for clarity
+- Bold the key term at the start of each bullet point
+- Keep bullet points focused and detailed but not too long
+- Group related requirements under appropriate section headings
+
+COMPREHENSIVE ANSWER:"""
         
         # Configure generation with maximum output tokens
         generation_config = {

@@ -66,6 +66,10 @@ class AuthManager:
     
     def login(self, user_data: Dict, remember_me: bool = False) -> None:
         """Log in user and set session data."""
+        # First, clear any existing session data to prevent cross-user contamination
+        self._clear_session_data()
+        
+        # Set new user session data
         st.session_state.authenticated = True
         st.session_state.username = user_data["username"]
         st.session_state.user_role = user_data["role"]
@@ -73,6 +77,11 @@ class AuthManager:
         st.session_state.user_email = user_data.get("email", "")
         st.session_state.login_time = user_data["login_time"]
         st.session_state.remember_me = remember_me
+        
+        # Initialize clean session state for this user
+        st.session_state.messages = []
+        st.session_state.mode = "standard"
+        st.session_state.uploaded_documents = []
         
         # Save to persistent storage if remember me is checked
         if remember_me:
@@ -83,8 +92,25 @@ class AuthManager:
         # Clear persistent storage
         self._clear_persistent_session()
         
-        # Clear session state
-        for key in ["authenticated", "username", "user_role", "user_name", "user_email", "login_time", "remember_me"]:
+        # Clear ALL session state to prevent data leakage between users
+        keys_to_clear = [
+            "authenticated", "username", "user_role", "user_name", "user_email", 
+            "login_time", "remember_me", "messages", "mode", "uploaded_documents",
+            "components", "initialized", "show_admin_portal"
+        ]
+        
+        for key in keys_to_clear:
+            if key in st.session_state:
+                del st.session_state[key]
+    
+    def _clear_session_data(self) -> None:
+        """Clear session data that could leak between users."""
+        keys_to_clear = [
+            "messages", "mode", "uploaded_documents", "components", 
+            "initialized", "show_admin_portal"
+        ]
+        
+        for key in keys_to_clear:
             if key in st.session_state:
                 del st.session_state[key]
     
@@ -239,6 +265,9 @@ class AuthManager:
                 # Check if session is still valid
                 expires = datetime.fromisoformat(session_data['expires'])
                 if datetime.now() < expires:
+                    # Clear any existing session data first
+                    self._clear_session_data()
+                    
                     # Restore session state
                     st.session_state.authenticated = True
                     st.session_state.username = session_data["username"]
@@ -247,6 +276,12 @@ class AuthManager:
                     st.session_state.user_email = session_data["user_email"]
                     st.session_state.login_time = datetime.fromisoformat(session_data["login_time"])
                     st.session_state.remember_me = True
+                    
+                    # Initialize clean session state for this user
+                    st.session_state.messages = []
+                    st.session_state.mode = "standard"
+                    st.session_state.uploaded_documents = []
+                    
                     return True
                 else:
                     # Expired, clear it

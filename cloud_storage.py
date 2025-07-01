@@ -327,7 +327,7 @@ class CloudStorageUI:
         from config import Config
         config = Config()
         if config.GOOGLE_DRIVE_FOLDER_ID:
-            st.info(f"📂 **Main Folder**: Gemini Training (`{config.GOOGLE_DRIVE_FOLDER_ID}`)")
+            st.info(f"📂 **Main Folder**: SOPs (`{config.GOOGLE_DRIVE_FOLDER_ID}`)")
             
             # Show subfolders in the main folder
             if self.gdrive.load_saved_credentials():
@@ -337,7 +337,7 @@ class CloudStorageUI:
                 subfolders = self.gdrive.list_folders(config.GOOGLE_DRIVE_FOLDER_ID)
                 if subfolders:
                     # Add option to sync main folder directly
-                    folder_options = {"📂 Main Folder (Gemini Training)": config.GOOGLE_DRIVE_FOLDER_ID}
+                    folder_options = {"📂 Main Folder (SOPs)": config.GOOGLE_DRIVE_FOLDER_ID}
                     for folder in subfolders:
                         folder_options[f"📁 {folder['name']}"] = folder['id']
                     

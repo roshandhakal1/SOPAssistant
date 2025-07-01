@@ -16,7 +16,7 @@ class Config:
         
         self.EMBEDDING_BATCH_SIZE = 100
         
-        self.TOP_K_RESULTS = 5
+        self.TOP_K_RESULTS = 50  # Maximum comprehensive coverage for 1500+ SOPs
         
         # Model Configuration (can be overridden by user settings)
         self.DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gemini-1.5-flash")

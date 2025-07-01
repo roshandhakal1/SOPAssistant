@@ -44,7 +44,7 @@ class ManufacturingExpertConsultant:
         Query: {query}
         
         Available SOP Context:
-        {chr(10).join(context[:3]) if context else "No specific SOP context available"}
+        {chr(10).join(context[:25]) if context else "No specific SOP context available"}
         
         Return a JSON object with:
         - expertise_areas: list of relevant roles
@@ -156,34 +156,77 @@ class ManufacturingExpertConsultant:
         CONSULTATION TYPE: {analysis.get('consultation_type', 'general')}
         KEY FOCUS AREAS: {', '.join(analysis.get('key_focus_areas', ['general']))}
         
-        Provide a comprehensive expert response that includes:
+        **CRITICAL FORMATTING REQUIREMENTS:**
+        - Use clear headings with ## for main sections and ### for subsections
+        - Each bullet point (•) must be on its own separate line
+        - Add blank lines between bullet points for better readability
+        - Start each bullet point with a **bold category or key term**
+        - Group information under logical section headings
+        - Use **bold text** for important terms, processes, and requirements
+        - Cite SOP references in quotes after each relevant point
+        - Never combine multiple bullet points into one paragraph
         
-        1. MAIN ANALYSIS:
-        - Address the query directly with deep expertise
-        - Reference relevant SOPs when applicable
-        - Provide specific, actionable insights
+        **REQUIRED EXPERT RESPONSE FORMAT:**
         
-        2. PERSPECTIVES FROM EACH RELEVANT ROLE:
-        {chr(10).join([f"- {role} perspective: Focus on {self.expertise_areas[role]}" 
+        ## Executive Summary
+        • [Key finding 1] ("[SOP Name]" if applicable)
+        • [Key finding 2] ("[SOP Name]" if applicable)
+        • [Main recommendation]
+        
+        ## Detailed Analysis
+        
+        ### Current State Assessment
+        • [Assessment point 1] ("[SOP Name]")
+        • [Assessment point 2] ("[SOP Name]")
+        
+        ### Key Requirements & Standards
+        • [Requirement 1] ("[SOP Name]")
+        • [Requirement 2] ("[SOP Name]")
+        
+        ### Expert Recommendations
+        
+        #### Immediate Actions (0-3 months)
+        • [Action 1] ("[SOP Name]" if applicable)
+        • [Action 2] ("[SOP Name]" if applicable)
+        
+        #### Medium-term Strategy (3-12 months)
+        • [Strategy 1]
+        • [Strategy 2]
+        
+        #### Long-term Considerations (12+ months)
+        • [Consideration 1]
+        • [Consideration 2]
+        
+        ## Risk Assessment & Compliance
+        
+        ### Potential Risks
+        • [Risk 1] ("[SOP Name]")
+        • [Risk 2] ("[SOP Name]")
+        
+        ### Regulatory Compliance
+        • [Compliance requirement 1] ("[SOP Name]")
+        • [Compliance requirement 2] ("[SOP Name]")
+        
+        ## Multi-Role Perspectives
+        
+        {chr(10).join([f"### {role} Perspective" + chr(10) + f"• [Key insight from {role.lower()} viewpoint] ('[SOP Name]' if applicable)" + chr(10) + f"• [Additional {role.lower()} consideration]" 
                       for role in expertise_areas if role in self.expertise_areas])}
         
-        3. RECOMMENDATIONS:
-        - Short-term actions (immediate to 3 months)
-        - Medium-term strategies (3-12 months)
-        - Long-term considerations (12+ months)
+        ## Implementation Guidance
         
-        4. RISKS AND CONSIDERATIONS:
-        - Potential challenges
-        - Compliance/regulatory considerations
-        - Resource requirements
+        ### Resource Requirements
+        • [Resource 1]
+        • [Resource 2]
         
-        5. CONFIDENCE ASSESSMENT:
-        - Areas of high confidence based on SOPs and expertise
-        - Areas requiring further investigation
+        ### Success Metrics
+        • [Metric 1]
+        • [Metric 2]
         
-        Respond in a clear, structured manner that demonstrates deep manufacturing expertise 
-        while being practical and actionable. Use specific examples from nutraceutical and 
-        bar manufacturing when relevant.
+        ### Next Steps
+        • [Next step 1]
+        • [Next step 2]
+        
+        Provide comprehensive, actionable guidance using clear formatting and specific SOP references.
         """
         
         return prompt
