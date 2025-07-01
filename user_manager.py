@@ -179,8 +179,9 @@ class UserManager:
             return
         
         st.markdown("## 👥 User Management Portal")
+        st.success("🔥 CACHE BUSTER v3 - Cloud Storage tab DELETED!")
         
-        # Tabs for different admin functions
+        # Tabs for different admin functions - CLOUD STORAGE REMOVED PERMANENTLY
         tab1, tab2, tab3, tab4 = st.tabs(["📋 All Users", "➕ Add User", "⚙️ User Settings", "🤖 Model Settings"])
         
         with tab1:
