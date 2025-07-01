@@ -26,6 +26,8 @@ from cloud_storage import CloudStorageUI
 
 st.set_page_config(page_title="Manufacturing Knowledge Assistant", page_icon="🏭", layout="wide")
 
+# Force deployment update - v2024.1
+
 # Require authentication before accessing the app
 auth_manager = require_auth()
 
