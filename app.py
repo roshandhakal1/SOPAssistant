@@ -10,7 +10,7 @@ from embeddings_manager import EmbeddingsManager
 from vector_db import VectorDatabase
 from rag_handler import RAGHandler
 from config import Config
-from expert_consultant import ManufacturingExpertConsultant
+from multi_expert_system import MultiExpertSystem
 from session_document_handler import SessionDocumentHandler
 from auth import require_auth
 from chat_history_manager import ChatHistoryManager
@@ -60,9 +60,9 @@ def get_model_components(config, vector_db):
     
     # Create model-specific handlers
     rag_handler = RAGHandler(config.GEMINI_API_KEY, vector_db, model_name=standard_model)
-    expert_consultant = ManufacturingExpertConsultant(config.GEMINI_API_KEY, model_name=expert_model)
+    multi_expert_system = MultiExpertSystem(config.GEMINI_API_KEY, model_name=expert_model)
     
-    return rag_handler, expert_consultant, standard_model, expert_model
+    return rag_handler, multi_expert_system, standard_model, expert_model
 
 def get_file_hash(file_path):
     with open(file_path, 'rb') as f:
@@ -471,7 +471,7 @@ def main():
             config, doc_processor, embeddings_manager, vector_db, session_doc_handler, chat_history_manager = components
         
         # Get model-specific components based on user settings
-        rag_handler, expert_consultant, standard_model, expert_model = get_model_components(config, vector_db)
+        rag_handler, multi_expert_system, standard_model, expert_model = get_model_components(config, vector_db)
     
     with st.sidebar:
         st.header("⚙️ Assistant Mode")
@@ -489,17 +489,20 @@ def main():
         
         # Only show expert details if in expert mode (cached)
         if st.session_state.mode == 'expert_consultant':
-            st.success("🏭 Expert Mode Active")
+            st.success("🏭 Multi-Expert Mode Active")
             
-            with st.expander("Expert Capabilities", expanded=False):
-                st.markdown("""
-                **Integrated Expertise:**
-                - **CEO**: Strategic vision & growth
-                - **CFO**: Financial optimization
-                - **CMO**: Market intelligence
-                - **Quality**: Compliance & standards
-                - **Supply Chain**: Operations excellence
-                """)
+            with st.expander("Available Experts", expanded=True):
+                available_experts = multi_expert_system.get_available_experts()
+                
+                st.markdown("**💡 Use @mentions to consult specific experts:**")
+                
+                for expert_name, expert_info in available_experts.items():
+                    with st.container():
+                        st.markdown(f"**{expert_info['mention']}** - {expert_info['title']}")
+                        st.caption(f"Specializes in: {', '.join(expert_info['specializations'])}")
+                        st.markdown("---")
+                
+                st.info("💬 **Examples:** \n- @QualityExpert how do we validate cleaning procedures? \n- @ManufacturingExpert what's causing batch variations? \n- Ask any question without @mention for auto-expert selection")
         
         st.divider()
         
@@ -752,7 +755,7 @@ def main():
     
     # Visual indicator for Expert Mode
     if st.session_state.mode == 'expert_consultant':
-        st.info("🏭 **Expert Consultant Mode** | You have access to comprehensive manufacturing expertise across all business functions")
+        st.info("🏭 **Multi-Expert Mode** | Access 10 specialized experts with @mentions or auto-consultation | Try: @QualityExpert, @ManufacturingExpert, etc.")
     
     # Show document context indicator
     if st.session_state.uploaded_documents:
@@ -760,7 +763,7 @@ def main():
         st.success(f"📎 {doc_count} reference document{'s' if doc_count != 1 else ''} loaded for this conversation")
     
     # Update placeholder based on mode
-    placeholder = "Ask about your SOPs..." if st.session_state.mode == 'standard' else "Ask for expert manufacturing advice..."
+    placeholder = "Ask about your SOPs..." if st.session_state.mode == 'standard' else "Ask experts: @QualityExpert, @ManufacturingExpert, @ProcessEngineeringExpert, etc. or just ask your question..."
     
     if prompt := st.chat_input(placeholder):
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -842,7 +845,7 @@ Answer:"""
                                     st.markdown(f'<span class="sop-reference">{source}</span>', unsafe_allow_html=True)
             
             else:  # Expert Consultant mode
-                with st.spinner("🏭 Manufacturing expert analyzing..."):
+                with st.spinner("🏭 Consulting manufacturing experts..."):
                     # Get relevant SOPs
                     query_embedding = rag_handler.embeddings_manager.create_query_embedding(prompt)
                     sop_documents, sop_metadatas = vector_db.search(query_embedding, top_k=5)
@@ -877,56 +880,101 @@ Answer:"""
                     
                     session_sources = [meta['filename'] for meta in session_metadatas] if session_metadatas else []
                     
-                    # Analyze query
-                    analysis = expert_consultant.analyze_query(prompt, all_context)
+                    # Consult relevant experts using new multi-expert system
+                    consultation_result = multi_expert_system.consult_experts(prompt, all_context)
                     
-                    # Generate expert response
-                    expert_response = expert_consultant.generate_expert_response(prompt, all_context, analysis)
+                    # Display multi-expert consultation results
+                    experts_consulted = consultation_result['experts_consulted']
+                    expert_responses = consultation_result['expert_responses']
+                    consultation_summary = consultation_result['consultation_summary']
                     
-                    # Display expert response with structured format
-                    st.markdown("#### 🏭 Manufacturing Expert Analysis")
-                    st.markdown(expert_response['main_response'], unsafe_allow_html=True)
+                    # Header with experts consulted
+                    if len(experts_consulted) == 1:
+                        expert_name = experts_consulted[0]
+                        expert_info = multi_expert_system.experts[expert_name]
+                        st.markdown(f"#### 🎯 {expert_info.title} Analysis")
+                    else:
+                        st.markdown(f"#### 🏭 Multi-Expert Consultation ({len(experts_consulted)} experts)")
+                        st.info(f"**Experts consulted:** {', '.join([multi_expert_system.experts[name].name for name in experts_consulted])}")
                     
-                    # Show expertise perspectives
-                    if expert_response.get('expertise_perspectives'):
-                        with st.expander("👥 Multi-Role Perspectives", expanded=True):
-                            for role, perspective in expert_response['expertise_perspectives'].items():
-                                st.markdown(f"**{role}**: {perspective}")
+                    # Display each expert's response
+                    for expert_name, expert_response in expert_responses.items():
+                        expert_info = multi_expert_system.experts[expert_name]
+                        
+                        if len(expert_responses) > 1:
+                            st.markdown(f"### 👤 {expert_response['expert_title']}")
+                        
+                        # Main response
+                        st.markdown(expert_response['main_response'], unsafe_allow_html=True)
+                        
+                        # Show expert-specific sections in expandable format
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            # Recommendations
+                            if expert_response.get('recommendations'):
+                                with st.expander(f"📋 {expert_info.name} Recommendations", expanded=len(expert_responses)==1):
+                                    recs = expert_response['recommendations']
+                                    if recs.get('immediate'):
+                                        st.markdown("**🚨 Immediate Actions:**")
+                                        for rec in recs['immediate']:
+                                            st.markdown(f"• {rec}")
+                                    if recs.get('short_term'):
+                                        st.markdown("**📅 Short-term (3-6 months):**")
+                                        for rec in recs['short_term']:
+                                            st.markdown(f"• {rec}")
+                                    if recs.get('long_term'):
+                                        st.markdown("**🎯 Long-term (6+ months):**")
+                                        for rec in recs['long_term']:
+                                            st.markdown(f"• {rec}")
+                        
+                        with col2:
+                            # Risks and follow-ups
+                            if expert_response.get('risks_considerations'):
+                                with st.expander(f"⚠️ {expert_info.name} Risk Assessment", expanded=len(expert_responses)==1):
+                                    for risk in expert_response['risks_considerations']:
+                                        st.markdown(f"• {risk}")
+                            
+                            if expert_response.get('follow_up_questions'):
+                                with st.expander(f"💭 {expert_info.name} Follow-ups", expanded=False):
+                                    for q in expert_response['follow_up_questions']:
+                                        st.markdown(f"• {q}")
+                        
+                        # Confidence level
+                        confidence = expert_response.get('confidence_level', 'medium')
+                        confidence_color = {'high': 'green', 'medium': 'orange', 'low': 'red'}.get(confidence, 'gray')
+                        st.markdown(f"**{expert_info.name} Confidence:** :{confidence_color}[{confidence.upper()}]")
+                        
+                        if len(expert_responses) > 1:
+                            st.markdown("---")
                     
-                    # Show recommendations
-                    if expert_response.get('recommendations'):
-                        with st.expander("📋 Recommendations", expanded=True):
-                            recs = expert_response['recommendations']
-                            if recs.get('immediate'):
-                                st.markdown("**Immediate Actions:**")
-                                for rec in recs['immediate']:
-                                    st.markdown(f"• {rec}")
-                            if recs.get('short_term'):
-                                st.markdown("**Short-term (3-6 months):**")
-                                for rec in recs['short_term']:
-                                    st.markdown(f"• {rec}")
-                            if recs.get('long_term'):
-                                st.markdown("**Long-term (6+ months):**")
-                                for rec in recs['long_term']:
-                                    st.markdown(f"• {rec}")
-                    
-                    # Show risks
-                    if expert_response.get('risks_and_considerations'):
-                        with st.expander("⚠️ Risks & Considerations"):
-                            for risk in expert_response['risks_and_considerations']:
-                                st.markdown(f"• {risk}")
-                    
-                    # Show confidence level
-                    confidence = expert_response.get('confidence_level', 'medium')
-                    confidence_color = {'high': 'green', 'medium': 'orange', 'low': 'red'}.get(confidence, 'gray')
-                    st.markdown(f"**Confidence Level:** :{confidence_color}[{confidence.upper()}]")
-                    
-                    # Show follow-up questions
-                    if expert_response.get('follow_up_questions'):
-                        st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
-                        st.markdown("**💭 Follow-up questions to consider:**")
-                        for q in expert_response['follow_up_questions']:
-                            st.markdown(f"• {q}")
+                    # Multi-expert summary (only if multiple experts)
+                    if consultation_summary['type'] == 'multi_expert':
+                        with st.expander("🤝 Multi-Expert Summary & Coordination", expanded=True):
+                            st.markdown("**🎯 Coordinated Recommendations:**")
+                            summary_recs = consultation_summary['consolidated_recommendations']
+                            
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                if summary_recs.get('immediate'):
+                                    st.markdown("**🚨 Immediate:**")
+                                    for rec in summary_recs['immediate'][:3]:  # Top 3
+                                        st.markdown(f"• {rec}")
+                            with col2:
+                                if summary_recs.get('short_term'):
+                                    st.markdown("**📅 Short-term:**")
+                                    for rec in summary_recs['short_term'][:3]:  # Top 3
+                                        st.markdown(f"• {rec}")
+                            with col3:
+                                if summary_recs.get('long_term'):
+                                    st.markdown("**🎯 Long-term:**")
+                                    for rec in summary_recs['long_term'][:3]:  # Top 3
+                                        st.markdown(f"• {rec}")
+                            
+                            if consultation_summary.get('consolidated_risks'):
+                                st.markdown("**⚠️ Key Risk Areas:**")
+                                for risk in consultation_summary['consolidated_risks'][:5]:  # Top 5 unique risks
+                                    st.markdown(f"• {risk}")
                     
                     # Show all referenced sources
                     if sop_sources or session_sources:
@@ -948,7 +996,18 @@ Answer:"""
                                     # Legacy format (just filename string)
                                     st.markdown(f'<span class="sop-reference">{source}</span>', unsafe_allow_html=True)
                     
-                    response = expert_response['main_response']
+                    # Create response summary for chat history
+                    if len(expert_responses) == 1:
+                        # Single expert response
+                        response = list(expert_responses.values())[0]['main_response']
+                    else:
+                        # Multi-expert summary for chat history
+                        expert_names = [multi_expert_system.experts[name].name for name in experts_consulted]
+                        response = f"**Multi-Expert Consultation:** {', '.join(expert_names)}\n\n"
+                        
+                        for expert_name, expert_resp in expert_responses.items():
+                            expert_title = expert_resp['expert_title']
+                            response += f"**{expert_title}:** {expert_resp['main_response'][:200]}...\n\n"
         
         st.session_state.messages.append({"role": "assistant", "content": response})
     
