@@ -616,8 +616,9 @@ def main():
             st.session_state.components = components
             config, doc_processor, embeddings_manager, vector_db, session_doc_handler, chat_history_manager = components
         
-        # Get model-specific components based on user settings
-        rag_handler, multi_expert_system, standard_model, expert_model = get_model_components(config, vector_db)
+    
+    # Get model-specific components based on user settings (after component initialization)
+    rag_handler, multi_expert_system, standard_model, expert_model = get_model_components(config, vector_db)
     
     with st.sidebar:
         st.header("🏭 Manufacturing Knowledge Assistant")
