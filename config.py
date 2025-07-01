@@ -7,7 +7,7 @@ load_dotenv()
 class Config:
     def __init__(self):
         # Just use environment variables from .env file
-        self.SOP_FOLDER = os.getenv("SOP_FOLDER", "/Users/roshandhakal/Desktop/AD/SOPs")
+        self.SOP_FOLDER = os.getenv("SOP_FOLDER", "./documents")
         self.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
         self.CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
         
@@ -42,5 +42,5 @@ class Config:
                 "export GEMINI_API_KEY='your-api-key-here'"
             )
         
-        if not Path(self.SOP_FOLDER).exists():
-            raise ValueError(f"SOP folder not found: {self.SOP_FOLDER}")
+        # Create documents folder if it doesn't exist
+        Path(self.SOP_FOLDER).mkdir(exist_ok=True)

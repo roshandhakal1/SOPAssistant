@@ -476,10 +476,50 @@ def main():
         
         st.divider()
         
-        # Condensed Document Management
+        # Document Management with Upload
         with st.expander("📁 Document Management", expanded=False):
             st.caption(f"SOP Folder: {config.SOP_FOLDER}")
             
+            # Upload section
+            st.subheader("📤 Upload Documents")
+            uploaded_files = st.file_uploader(
+                "Upload PDF or Word documents:",
+                type=['pdf', 'docx', 'doc'],
+                accept_multiple_files=True,
+                help="Upload your SOP documents to add them to the knowledge base"
+            )
+            
+            if uploaded_files:
+                upload_col1, upload_col2 = st.columns([3, 1])
+                with upload_col1:
+                    if st.button("Process Uploaded Files", type="primary"):
+                        # Ensure documents folder exists
+                        Path(config.SOP_FOLDER).mkdir(exist_ok=True)
+                        
+                        with st.spinner("Processing uploaded files..."):
+                            for uploaded_file in uploaded_files:
+                                # Save uploaded file
+                                file_path = Path(config.SOP_FOLDER) / uploaded_file.name
+                                with open(file_path, "wb") as f:
+                                    f.write(uploaded_file.getbuffer())
+                                st.success(f"Saved: {uploaded_file.name}")
+                            
+                            # Update database with new files
+                            updates, removed_files, new_index = check_for_updates(
+                                config, doc_processor, embeddings_manager, vector_db
+                            )
+                            if updates:
+                                process_updates(updates, removed_files, new_index, 
+                                              doc_processor, embeddings_manager, vector_db)
+                                st.success(f"Successfully processed {len(updates)} documents!")
+                            else:
+                                st.info("No new documents to process")
+                with upload_col2:
+                    st.caption(f"{len(uploaded_files)} file(s) selected")
+            
+            st.divider()
+            
+            # Existing document management
             col1, col2 = st.columns([1, 1])
             with col1:
                 if st.button("🔄 Check for Updates", type="secondary", use_container_width=True):
