@@ -480,11 +480,73 @@ class UserManager:
     
     def _render_cloud_storage(self):
         """Render cloud storage admin settings."""
-        from cloud_storage import CloudStorageUI
+        from cloud_storage import CloudStorageUI, GoogleDriveManager
         
         st.markdown("### ☁️ Cloud Storage Management")
         st.info("Configure cloud storage integration for all users. Only admins can manage cloud storage settings.")
         
-        # Initialize cloud storage UI
+        # Initialize cloud storage UI with fresh instance
         cloud_ui = CloudStorageUI()
+        
+        # Add admin-specific disconnect option at the top
+        gdrive = GoogleDriveManager()
+        if gdrive.load_saved_credentials():
+            st.success("✅ Connected to Google Drive (Admin)")
+            
+            col1, col2 = st.columns([3, 1])
+            with col2:
+                if st.button("🔓 Disconnect", type="secondary", key="admin_disconnect"):
+                    # Clear the gdrive object credentials
+                    gdrive.credentials = None
+                    gdrive.service = None
+                    
+                    # Clear all persistent storage methods
+                    if 'gdrive_credentials' in st.session_state:
+                        del st.session_state.gdrive_credentials
+                    if hasattr(st.session_state, '_persistent_gdrive_creds'):
+                        del st.session_state._persistent_gdrive_creds
+                    
+                    # Clear environment variable
+                    import os
+                    if 'GDRIVE_CREDENTIALS' in os.environ:
+                        del os.environ['GDRIVE_CREDENTIALS']
+                    
+                    # Remove persistent file
+                    try:
+                        if os.path.exists('.gdrive_credentials.json'):
+                            os.remove('.gdrive_credentials.json')
+                    except Exception:
+                        pass
+                    
+                    st.success("✅ Disconnected from Google Drive")
+                    st.rerun()
+        
+        st.divider()
+        
+        # Add admin debug section
+        if gdrive.load_saved_credentials():
+            with st.expander("🔧 Admin Debug Tools", expanded=False):
+                st.markdown("**Debug Google Drive Pagination:**")
+                
+                from config import Config
+                config = Config()
+                
+                if st.button("🔄 Force Refresh Folder Counts", key="admin_refresh"):
+                    # Clear any cached results
+                    if hasattr(st.session_state, '_cached_folder_counts'):
+                        del st.session_state._cached_folder_counts
+                    
+                    # Test pagination on main folder
+                    if config.GOOGLE_DRIVE_FOLDER_ID:
+                        with st.spinner("Testing pagination..."):
+                            # Get subfolders
+                            subfolders = gdrive.list_folders(config.GOOGLE_DRIVE_FOLDER_ID)
+                            st.write(f"**Found {len(subfolders)} subfolders:**")
+                            
+                            for folder in subfolders:
+                                # Test document count with pagination
+                                docs = gdrive.list_documents(folder['id'])
+                                st.write(f"- 📁 **{folder['name']}**: {len(docs)} documents")
+        
+        # Show the main cloud storage UI
         cloud_ui.render_google_drive_setup()
