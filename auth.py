@@ -20,6 +20,15 @@ class AuthManager:
         # Session timeout (4 hours for normal session, 30 days for remember me)
         self.session_timeout = timedelta(hours=4)
         self.remember_timeout = timedelta(days=30)
+        
+        # Initialize session persistence
+        self._init_session_persistence()
+    
+    def _init_session_persistence(self) -> None:
+        """Initialize session persistence on startup."""
+        # Try to load persistent session if not already authenticated
+        if "authenticated" not in st.session_state:
+            self._load_persistent_session()
     
     def _hash_password(self, password: str) -> str:
         """Hash password using SHA-256."""
@@ -186,11 +195,13 @@ class AuthManager:
                 "expires": (datetime.now() + self.remember_timeout).isoformat()
             }
             
-            # Try multiple storage methods
-            # Method 1: Environment variable (works on cloud deployments)
+            # Method 1: Streamlit session state (primary)
+            st.session_state._persistent_session = session_data
+            
+            # Method 2: Environment variable (works on cloud deployments)
             os.environ['USER_SESSION'] = json.dumps(session_data)
             
-            # Method 2: File storage (fallback)
+            # Method 3: File storage (fallback)
             try:
                 with open('.user_session.json', 'w') as f:
                     json.dump(session_data, f)
@@ -205,8 +216,12 @@ class AuthManager:
         try:
             session_data = None
             
-            # Try environment variable first
-            if 'USER_SESSION' in os.environ:
+            # Try Streamlit session state first (most reliable)
+            if hasattr(st.session_state, '_persistent_session'):
+                session_data = st.session_state._persistent_session
+            
+            # Try environment variable 
+            if not session_data and 'USER_SESSION' in os.environ:
                 try:
                     session_data = json.loads(os.environ['USER_SESSION'])
                 except Exception:
@@ -245,6 +260,10 @@ class AuthManager:
     def _clear_persistent_session(self) -> None:
         """Clear persistent session storage."""
         try:
+            # Clear Streamlit session state
+            if hasattr(st.session_state, '_persistent_session'):
+                del st.session_state._persistent_session
+            
             # Clear environment variable
             if 'USER_SESSION' in os.environ:
                 del os.environ['USER_SESSION']

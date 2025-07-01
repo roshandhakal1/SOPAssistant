@@ -17,6 +17,9 @@ class GoogleDriveManager:
         self.credentials = None
         self.service = None
         
+        # Auto-load credentials on initialization
+        self.load_saved_credentials()
+        
     def setup_oauth_flow(self, client_config: Dict) -> str:
         """Setup OAuth flow and return authorization URL"""
         # Try with the simplest redirect URI that should work
@@ -60,16 +63,15 @@ class GoogleDriveManager:
             
             # Save to multiple persistent locations
             try:
-                import json
-                # Try file storage
+                # Method 1: Streamlit session state (primary)
+                st.session_state._persistent_gdrive_creds = cred_data
+                
+                # Method 2: Environment variable (works on cloud deployments)
+                os.environ['GDRIVE_CREDENTIALS'] = json.dumps(cred_data)
+                
+                # Method 3: File storage (fallback)
                 with open('.gdrive_credentials.json', 'w') as f:
                     json.dump(cred_data, f)
-                    
-                # Also try Streamlit secrets (if available)
-                if hasattr(st, 'secrets'):
-                    # Store in a way that persists across deployments
-                    import os
-                    os.environ['GDRIVE_CREDENTIALS'] = json.dumps(cred_data)
                     
             except Exception as e:
                 st.warning(f"Could not save credentials persistently: {e}")
@@ -90,11 +92,17 @@ class GoogleDriveManager:
             import json
             import os
             
+            # Try persistent session state (most reliable)
+            if hasattr(st.session_state, '_persistent_gdrive_creds'):
+                cred_data = st.session_state._persistent_gdrive_creds
+                st.session_state.gdrive_credentials = cred_data
+            
             # Try environment variable (works on cloud deployments)
-            if 'GDRIVE_CREDENTIALS' in os.environ:
+            if not cred_data and 'GDRIVE_CREDENTIALS' in os.environ:
                 try:
                     cred_data = json.loads(os.environ['GDRIVE_CREDENTIALS'])
                     st.session_state.gdrive_credentials = cred_data
+                    st.session_state._persistent_gdrive_creds = cred_data
                 except Exception:
                     pass
             
@@ -104,6 +112,7 @@ class GoogleDriveManager:
                     with open('.gdrive_credentials.json', 'r') as f:
                         cred_data = json.load(f)
                         st.session_state.gdrive_credentials = cred_data
+                        st.session_state._persistent_gdrive_creds = cred_data
                 except Exception:
                     pass
             
@@ -113,6 +122,7 @@ class GoogleDriveManager:
                     if hasattr(st, 'secrets') and 'gdrive_credentials' in st.secrets:
                         cred_data = dict(st.secrets.gdrive_credentials)
                         st.session_state.gdrive_credentials = cred_data
+                        st.session_state._persistent_gdrive_creds = cred_data
                 except Exception:
                     pass
         
@@ -129,11 +139,19 @@ class GoogleDriveManager:
             # Refresh if needed
             if self.credentials.expired and self.credentials.refresh_token:
                 self.credentials.refresh(Request())
-                # Update both session state and file with new token
+                # Update all storage methods with new token
                 cred_data['token'] = self.credentials.token
                 st.session_state.gdrive_credentials = cred_data
+                st.session_state._persistent_gdrive_creds = cred_data
+                
+                # Update environment variable
                 try:
-                    import json
+                    os.environ['GDRIVE_CREDENTIALS'] = json.dumps(cred_data)
+                except Exception:
+                    pass
+                
+                # Update file storage
+                try:
                     with open('.gdrive_credentials.json', 'w') as f:
                         json.dump(cred_data, f)
                 except Exception:
@@ -347,11 +365,19 @@ class CloudStorageUI:
             
             # Disconnect option
             if st.button("🔓 Disconnect Google Drive"):
+                # Clear all persistent storage methods
                 if 'gdrive_credentials' in st.session_state:
                     del st.session_state.gdrive_credentials
-                # Also remove persistent file
+                if hasattr(st.session_state, '_persistent_gdrive_creds'):
+                    del st.session_state._persistent_gdrive_creds
+                
+                # Clear environment variable
+                import os
+                if 'GDRIVE_CREDENTIALS' in os.environ:
+                    del os.environ['GDRIVE_CREDENTIALS']
+                
+                # Remove persistent file
                 try:
-                    import os
                     if os.path.exists('.gdrive_credentials.json'):
                         os.remove('.gdrive_credentials.json')
                 except Exception:
@@ -376,8 +402,6 @@ class CloudStorageUI:
             """)
         
         # Check if client config is in environment variables
-        import os
-        import json
         env_client_config = os.getenv('GDRIVE_CLIENT_CONFIG')
         
         if env_client_config:
