@@ -14,6 +14,7 @@ from expert_consultant import ManufacturingExpertConsultant
 from session_document_handler import SessionDocumentHandler
 from auth import require_auth
 from chat_history_manager import ChatHistoryManager
+from cloud_storage import CloudStorageUI
 
 st.set_page_config(page_title="Manufacturing Knowledge Assistant", page_icon="🏭", layout="wide")
 
@@ -557,6 +558,12 @@ def main():
                     total_size = sum(len(f.getvalue()) for f in uploaded_files) / (1024 * 1024)  # MB
                     st.metric("Total Size", f"{total_size:.1f} MB")
                     st.caption("Batch processing recommended for large uploads")
+            
+            st.divider()
+            
+            # Cloud Storage Integration
+            cloud_ui = CloudStorageUI()
+            cloud_ui.render_google_drive_setup()
             
             st.divider()
             
