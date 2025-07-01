@@ -430,16 +430,32 @@ def main():
             
             # Check if this is first run (no documents in DB)
             if not vector_db.has_documents():
-                st.info("🔄 Knowledge base is empty. Upload documents in the sidebar to get started!")
+                st.info("🔄 Knowledge base is empty. Checking for documents...")
+                
+                # Try auto-sync from Google Drive if configured
+                if config.AUTO_SYNC_ON_STARTUP and config.GOOGLE_DRIVE_FOLDER_ID:
+                    try:
+                        from cloud_storage import GoogleDriveManager
+                        gdrive = GoogleDriveManager()
+                        
+                        if gdrive.load_saved_credentials():
+                            with st.spinner("🔄 Auto-syncing from Google Drive..."):
+                                downloaded_files = gdrive.sync_folder(config.GOOGLE_DRIVE_FOLDER_ID, config.SOP_FOLDER)
+                                if downloaded_files:
+                                    st.success(f"✅ Auto-synced {len(downloaded_files)} documents from Google Drive!")
+                    except Exception as e:
+                        st.warning("⚠️ Auto-sync failed. Manual upload available in Document Management.")
+                
+                # Check for any documents (local or synced)
                 updates, removed_files, new_index = check_for_updates(
                     config, doc_processor, embeddings_manager, vector_db
                 )
                 if updates:
-                    st.info("Found existing documents in folder. Processing...")
+                    st.info("Found documents. Processing...")
                     process_updates(updates, removed_files, new_index, 
                                   doc_processor, embeddings_manager, vector_db)
                 else:
-                    st.info("💡 To begin: Go to 📁 Document Management → Upload your SOP files")
+                    st.info("💡 No documents found. Use Document Management in sidebar to upload files.")
             
             st.session_state.initialized = True
     else:

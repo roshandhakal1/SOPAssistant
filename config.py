@@ -36,6 +36,10 @@ class Config:
             "general"
         ]
         
+        # Google Drive configuration
+        self.GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "1MQIDFQHcfbJ-iAFkczXL9HtpGe2gjoqJ")
+        self.AUTO_SYNC_ON_STARTUP = os.getenv("AUTO_SYNC_ON_STARTUP", "true").lower() == "true"
+        
         if not self.GEMINI_API_KEY:
             raise ValueError(
                 "GEMINI_API_KEY not found. Please set it as an environment variable:\n"

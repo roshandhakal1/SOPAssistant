@@ -229,6 +229,32 @@ class CloudStorageUI:
         """Render Google Drive setup UI"""
         st.subheader("☁️ Google Drive Integration")
         
+        # Show configured folder info
+        from config import Config
+        config = Config()
+        if config.GOOGLE_DRIVE_FOLDER_ID:
+            st.info(f"📂 **Configured Folder ID**: `{config.GOOGLE_DRIVE_FOLDER_ID}`")
+            st.caption("This folder will be used for auto-sync on startup.")
+            
+            # Quick sync button for the configured folder
+            if self.gdrive.load_saved_credentials():
+                if st.button("🚀 Sync from Configured Folder", type="primary"):
+                    with st.spinner("Syncing from configured Google Drive folder..."):
+                        downloaded_files = self.gdrive.sync_folder(config.GOOGLE_DRIVE_FOLDER_ID, "./documents")
+                        if downloaded_files:
+                            st.success(f"✅ Synced {len(downloaded_files)} documents!")
+                            
+                            # Show synced files with links
+                            with st.expander("View Synced Documents", expanded=True):
+                                for file_info in downloaded_files:
+                                    col1, col2 = st.columns([3, 1])
+                                    with col1:
+                                        st.text(f"📄 {Path(file_info['path']).name}")
+                                    with col2:
+                                        st.markdown(f"[Open in Drive]({file_info['gdrive_link']})")
+        
+        st.divider()
+        
         # Check if already authenticated
         if self.gdrive.load_saved_credentials():
             st.success("✅ Connected to Google Drive")

@@ -19,3 +19,7 @@ services:
         value: "False"
       - key: CHROMA_CLIENT_TIMEOUT
         value: "60"
+      - key: GOOGLE_DRIVE_FOLDER_ID
+        value: "1MQIDFQHcfbJ-iAFkczXL9HtpGe2gjoqJ"
+      - key: AUTO_SYNC_ON_STARTUP
+        value: "true"
