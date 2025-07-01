@@ -75,6 +75,21 @@ class UserManager:
         """Get all users."""
         return self.users
     
+    def get_user_model(self, username: str, mode: str = "standard") -> str:
+        """Get the effective model for a user."""
+        user = self.users.get(username, {})
+        user_model = user.get('model', 'default')
+        
+        if user_model == 'default':
+            # Use global defaults
+            if mode == "expert":
+                return self.settings.get("expert_model", "gemini-1.5-pro")
+            else:
+                return self.settings.get("standard_model", "gemini-1.5-flash")
+        
+        # User has specific model preference
+        return user_model
+    
     def render_admin_portal(self):
         """COMPLETELY NEW ADMIN PORTAL - NO CLOUD STORAGE TAB!"""
         if not hasattr(st.session_state, 'user_role') or st.session_state.user_role != 'admin':
