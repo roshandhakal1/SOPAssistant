@@ -200,7 +200,7 @@ class GoogleDriveManager:
             return []
     
     def list_documents(self, folder_id: str) -> List[Dict]:
-        """List documents in a specific folder with pagination support"""
+        """List ALL documents in folder - NO PAGINATION LIMITS"""
         if not self.service:
             return []
         
@@ -222,30 +222,36 @@ class GoogleDriveManager:
             query += " or ".join([f"mimeType='{mime}'" for mime in mime_types])
             query += ")"
             
+            # FETCH ALL FILES AT ONCE - NO PAGE LIMITS
             all_files = []
             page_token = None
             
-            # Get all files with pagination
             while True:
                 request_params = {
                     'q': query,
                     'fields': "nextPageToken, files(id, name, mimeType, size, modifiedTime)",
-                    'pageSize': 1000  # Maximum allowed
+                    'pageSize': 1000  # Max per page
                 }
                 
                 if page_token:
                     request_params['pageToken'] = page_token
                 
                 results = self.service.files().list(**request_params).execute()
-                
                 files = results.get('files', [])
                 all_files.extend(files)
                 
+                # Continue until ALL files fetched
                 page_token = results.get('nextPageToken')
                 if not page_token:
                     break
+                    
+                # Progress indicator for large folders
+                if len(all_files) % 1000 == 0:
+                    st.info(f"📄 Fetched {len(all_files)} documents... (continuing)")
             
+            st.success(f"✅ Fetched ALL {len(all_files)} documents from folder")
             return all_files
+            
         except Exception as e:
             st.error(f"Error listing documents: {str(e)}")
             return []

@@ -85,12 +85,13 @@ class UserManager:
         st.error("🔥 COMPLETELY REBUILT - NO CLOUD STORAGE TAB!")
         st.info("📂 For Google Drive: Use main app → Document Management in sidebar")
         
-        # ONLY 4 TABS - NO CLOUD STORAGE!
-        tab1, tab2, tab3, tab4 = st.tabs([
+        # 5 TABS WITH INTEGRATION
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "📋 All Users", 
             "➕ Add User", 
             "⚙️ User Settings", 
-            "🤖 Model Settings"
+            "🤖 Model Settings",
+            "🔗 Integration"
         ])
         
         with tab1:
@@ -104,6 +105,9 @@ class UserManager:
         
         with tab4:
             self._show_models()
+        
+        with tab5:
+            self._integration_tab()
     
     def _show_users(self):
         """Show all users."""
@@ -154,3 +158,164 @@ class UserManager:
         
         for model_key, model_name in self.available_models.items():
             st.write(f"**{model_name}**")
+    
+    def _integration_tab(self):
+        """Google Drive Integration - Simple and Error-Free"""
+        st.markdown("### 🔗 Google Drive Integration")
+        st.info("Connect Google Drive to sync documents. Fetches ALL documents at once (no pagination limits).")
+        
+        # Check connection status
+        connected = (
+            'gdrive_credentials' in st.session_state or 
+            'GDRIVE_CREDENTIALS' in os.environ or 
+            os.path.exists('.gdrive_credentials.json')
+        )
+        
+        if connected:
+            # CONNECTED STATE
+            st.success("✅ Google Drive Connected")
+            
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.write("📂 Ready to sync documents from Google Drive")
+                st.write("💡 Go to main app → Document Management to select folders")
+            
+            with col2:
+                if st.button("🔓 Disconnect", type="secondary", key="gdrive_disconnect"):
+                    self._disconnect_google_drive()
+                    st.success("✅ Disconnected!")
+                    st.rerun()
+        
+        else:
+            # NOT CONNECTED STATE  
+            st.warning("🔗 Google Drive not connected")
+            
+            with st.expander("📋 Setup Instructions", expanded=True):
+                st.markdown("""
+                **Quick Setup Steps:**
+                1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+                2. Create/select project → Enable Google Drive API
+                3. Create OAuth 2.0 credentials (Desktop application)
+                4. Download JSON → Paste below
+                """)
+            
+            # JSON input
+            st.markdown("**OAuth Configuration:**")
+            config_json = st.text_area(
+                "Paste your OAuth 2.0 JSON configuration:",
+                placeholder='{"installed":{"client_id":"your_client_id","client_secret":"your_secret",...}}',
+                height=120,
+                key="oauth_config"
+            )
+            
+            if config_json:
+                if st.button("🚀 Connect Google Drive", type="primary"):
+                    try:
+                        self._start_google_auth(config_json)
+                    except Exception as e:
+                        st.error(f"❌ Configuration error: {str(e)}")
+            
+            # Show authorization step if in progress
+            if 'oauth_flow' in st.session_state:
+                st.success("✅ Ready for authorization!")
+                
+                if 'auth_url' in st.session_state:
+                    st.markdown(f"**[🔐 Click to Authorize]({st.session_state.auth_url})**")
+                    
+                    with st.expander("Can't click? Copy URL manually:", expanded=False):
+                        st.code(st.session_state.auth_url)
+                
+                # Authorization code input
+                auth_code = st.text_input("📝 Paste authorization code here:", key="auth_code")
+                
+                if auth_code and st.button("✅ Complete Connection"):
+                    try:
+                        self._complete_google_auth(auth_code)
+                        st.success("🎉 Connected successfully!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Authorization failed: {str(e)}")
+    
+    def _start_google_auth(self, config_json: str):
+        """Start Google OAuth flow"""
+        import json
+        from google_auth_oauthlib.flow import Flow
+        
+        # Parse and validate config
+        config = json.loads(config_json)
+        
+        # Create OAuth flow
+        flow = Flow.from_client_config(
+            config,
+            scopes=['https://www.googleapis.com/auth/drive.readonly'],
+            redirect_uri='urn:ietf:wg:oauth:2.0:oob'
+        )
+        
+        # Generate authorization URL
+        auth_url, _ = flow.authorization_url(
+            prompt='consent',
+            access_type='offline'
+        )
+        
+        # Store in session
+        st.session_state.oauth_flow = flow
+        st.session_state.auth_url = auth_url
+        
+        # Store config for persistence
+        os.environ['GDRIVE_CLIENT_CONFIG'] = config_json
+    
+    def _complete_google_auth(self, auth_code: str):
+        """Complete Google OAuth and save credentials"""
+        import json
+        
+        # Get flow from session
+        flow = st.session_state.oauth_flow
+        
+        # Exchange code for credentials
+        flow.fetch_token(code=auth_code)
+        creds = flow.credentials
+        
+        # Save credentials
+        cred_data = {
+            'token': creds.token,
+            'refresh_token': creds.refresh_token,
+            'token_uri': creds.token_uri,
+            'client_id': creds.client_id,
+            'client_secret': creds.client_secret,
+            'scopes': creds.scopes
+        }
+        
+        # Store in multiple places for persistence
+        st.session_state.gdrive_credentials = cred_data
+        st.session_state._persistent_gdrive_creds = cred_data
+        os.environ['GDRIVE_CREDENTIALS'] = json.dumps(cred_data)
+        
+        # Save to file
+        with open('.gdrive_credentials.json', 'w') as f:
+            json.dump(cred_data, f)
+        
+        # Clean up session
+        if 'oauth_flow' in st.session_state:
+            del st.session_state.oauth_flow
+        if 'auth_url' in st.session_state:
+            del st.session_state.auth_url
+    
+    def _disconnect_google_drive(self):
+        """Completely disconnect Google Drive"""
+        # Clear session state
+        for key in ['gdrive_credentials', '_persistent_gdrive_creds', 'oauth_flow', 'auth_url']:
+            if key in st.session_state:
+                del st.session_state[key]
+        
+        # Clear environment
+        if 'GDRIVE_CREDENTIALS' in os.environ:
+            del os.environ['GDRIVE_CREDENTIALS']
+        if 'GDRIVE_CLIENT_CONFIG' in os.environ:
+            del os.environ['GDRIVE_CLIENT_CONFIG']
+        
+        # Clear file
+        try:
+            if os.path.exists('.gdrive_credentials.json'):
+                os.remove('.gdrive_credentials.json')
+        except:
+            pass
