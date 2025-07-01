@@ -217,19 +217,24 @@ class UserManager:
                 if gdrive.load_saved_credentials():
                     st.markdown("### 📁 Select Folder to Sync")
                     
-                    # Get folders from main Google Drive folder
-                    if config.GOOGLE_DRIVE_FOLDER_ID:
-                        with st.spinner("Loading folders..."):
-                            # Get subfolders
-                            subfolders = gdrive.list_folders(config.GOOGLE_DRIVE_FOLDER_ID)
-                            
-                            # Create folder options
-                            folder_options = {
-                                "📂 SOPs (Main Folder)": config.GOOGLE_DRIVE_FOLDER_ID
-                            }
-                            
-                            for folder in subfolders:
-                                folder_options[f"📁 {folder['name']}"] = folder['id']
+                    # Debug: Show what folder ID we're using
+                    st.info(f"📍 Using folder ID: {config.GOOGLE_DRIVE_FOLDER_ID}")
+                    st.info(f"📍 Environment override: {os.getenv('GOOGLE_DRIVE_FOLDER_ID', 'Not set')}")
+                    
+                    # FORCE USE SOPs FOLDER - IGNORE CONFIG
+                    SOPS_FOLDER_ID = "1etIfvZ8BNzCTkJ-X70fLoMa4E-KTb-zh"
+                    
+                    with st.spinner("Loading folders..."):
+                        # Get subfolders from SOPs folder
+                        subfolders = gdrive.list_folders(SOPS_FOLDER_ID)
+                        
+                        # Create folder options
+                        folder_options = {
+                            "📂 SOPs (Main Folder)": SOPS_FOLDER_ID
+                        }
+                        
+                        for folder in subfolders:
+                            folder_options[f"📁 {folder['name']}"] = folder['id']
                         
                         # Folder selection
                         selected_folder_name = st.selectbox(
@@ -329,8 +334,6 @@ class UserManager:
                                         st.text(f"📄 {doc['name']}")
                                     if len(documents) > 10:
                                         st.text(f"... and {len(documents) - 10} more files")
-                    else:
-                        st.error("❌ No Google Drive folder configured")
                 else:
                     st.error("❌ Failed to load Google Drive credentials")
                     
