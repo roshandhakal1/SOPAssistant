@@ -503,84 +503,83 @@ def main():
         
         st.divider()
         
-        # Document Management with Upload
+        # Document Management with Google Drive Integration
         with st.expander("📁 Document Management", expanded=False):
-            st.caption(f"SOP Folder: {config.SOP_FOLDER}")
+            st.caption(f"Knowledge Base: {config.SOP_FOLDER}")
             
-            # Upload section
-            st.subheader("📤 Upload Documents")
+            # Google Drive Integration
+            st.subheader("☁️ Google Drive Sync")
             
-            # Bulk upload with folder-like functionality
-            uploaded_files = st.file_uploader(
-                "Upload your SOP documents:",
-                type=['pdf', 'docx', 'doc', 'csv', 'md'],
-                accept_multiple_files=True,
-                help="Select multiple files from your SOP folder. Supports PDF, DOC, DOCX, CSV, and Markdown files."
-            )
+            from cloud_storage import GoogleDriveManager
+            gdrive = GoogleDriveManager()
             
-            if uploaded_files:
-                st.info(f"📂 Selected {len(uploaded_files)} files for processing")
+            if gdrive.load_saved_credentials():
+                st.success("✅ Connected to Google Drive")
                 
-                # Show file list with sizes
-                with st.expander("View Selected Files", expanded=len(uploaded_files) <= 5):
-                    for file in uploaded_files:
-                        file_size = len(file.getvalue()) / 1024  # KB
-                        st.text(f"📄 {file.name} ({file_size:.1f} KB)")
-                
-                upload_col1, upload_col2 = st.columns([2, 1])
-                with upload_col1:
-                    if st.button("🚀 Process All Files", type="primary", use_container_width=True):
-                        # Ensure documents folder exists
-                        Path(config.SOP_FOLDER).mkdir(exist_ok=True)
+                # Show configured folder info
+                if config.GOOGLE_DRIVE_FOLDER_ID:
+                    st.info(f"📂 **Main Folder**: Gemini Training (`{config.GOOGLE_DRIVE_FOLDER_ID}`)")
+                    
+                    # List subfolders and show document count
+                    subfolders = gdrive.list_folders(config.GOOGLE_DRIVE_FOLDER_ID)
+                    if subfolders:
+                        # Add option to sync main folder directly
+                        folder_options = {"📂 Main Folder (Gemini Training)": config.GOOGLE_DRIVE_FOLDER_ID}
+                        for folder in subfolders:
+                            # Get document count for each folder (with pagination)
+                            doc_count = len(gdrive.list_documents(folder['id']))
+                            folder_options[f"📁 {folder['name']} ({doc_count} docs)"] = folder['id']
                         
-                        # Process files one by one with progress
-                        progress_bar = st.progress(0)
-                        status_text = st.empty()
-                        
-                        successful = 0
-                        failed_files = []
-                        
-                        for i, uploaded_file in enumerate(uploaded_files):
-                            try:
-                                status_text.text(f"Processing: {uploaded_file.name}")
-                                progress_bar.progress((i + 1) / len(uploaded_files))
-                                
-                                # Save uploaded file
-                                file_path = Path(config.SOP_FOLDER) / uploaded_file.name
-                                with open(file_path, "wb") as f:
-                                    f.write(uploaded_file.getbuffer())
-                                
-                                successful += 1
-                                
-                            except Exception as e:
-                                failed_files.append(f"{uploaded_file.name}: {str(e)}")
-                        
-                        # Update database with new files
-                        status_text.text("Updating knowledge base...")
-                        updates, removed_files, new_index = check_for_updates(
-                            config, doc_processor, embeddings_manager, vector_db
+                        selected_sync_folder = st.selectbox(
+                            "Select folder to sync documents from:",
+                            options=list(folder_options.keys()),
+                            key="sync_folder_selection"
                         )
                         
-                        if updates:
-                            process_updates(updates, removed_files, new_index, 
-                                          doc_processor, embeddings_manager, vector_db)
-                        
-                        # Show results
-                        progress_bar.empty()
-                        status_text.empty()
-                        
-                        if successful > 0:
-                            st.success(f"✅ Successfully processed {successful}/{len(uploaded_files)} files!")
-                        
-                        if failed_files:
-                            st.error("❌ Failed to process some files:")
-                            for error in failed_files:
-                                st.text(f"• {error}")
-                
-                with upload_col2:
-                    total_size = sum(len(f.getvalue()) for f in uploaded_files) / (1024 * 1024)  # MB
-                    st.metric("Total Size", f"{total_size:.1f} MB")
-                    st.caption("Batch processing recommended for large uploads")
+                        if selected_sync_folder:
+                            folder_id = folder_options[selected_sync_folder]
+                            
+                            # Show total documents in selected folder
+                            documents = gdrive.list_documents(folder_id)
+                            if documents:
+                                st.info(f"📄 **{len(documents)} documents** found in this folder")
+                                
+                                if st.button("🚀 Sync to Knowledge Base", type="primary", use_container_width=True):
+                                    with st.spinner(f"Syncing {len(documents)} documents from Google Drive..."):
+                                        # Clear documents folder first to avoid duplicates
+                                        import shutil
+                                        if Path(config.SOP_FOLDER).exists():
+                                            shutil.rmtree(config.SOP_FOLDER)
+                                        Path(config.SOP_FOLDER).mkdir(parents=True, exist_ok=True)
+                                        
+                                        # Sync files
+                                        downloaded_files = gdrive.sync_folder(folder_id, config.SOP_FOLDER)
+                                        
+                                        if downloaded_files:
+                                            # Process all files into knowledge base
+                                            updates, removed_files, new_index = check_for_updates(
+                                                config, doc_processor, embeddings_manager, vector_db
+                                            )
+                                            
+                                            if updates:
+                                                process_updates(updates, removed_files, new_index, 
+                                                              doc_processor, embeddings_manager, vector_db)
+                                            
+                                            # Save this folder as the preferred sync folder
+                                            st.session_state.preferred_sync_folder = folder_id
+                                            
+                                            st.success(f"✅ **{len(downloaded_files)} documents** synced and processed into knowledge base!")
+                                            st.info("💡 Your knowledge base is now ready for questions!")
+                                        else:
+                                            st.error("❌ No documents were synced")
+                            else:
+                                st.warning("No supported documents found in this folder")
+                    else:
+                        st.warning("No subfolders found in the main folder")
+            else:
+                st.info("🔗 Connect Google Drive to sync documents automatically")
+                if st.button("🔐 Connect Google Drive", use_container_width=True):
+                    st.info("Go to Admin Portal to set up Google Drive integration")
             
             st.divider()
             

@@ -162,7 +162,7 @@ class GoogleDriveManager:
         return False
     
     def list_folders(self, parent_folder_id: Optional[str] = None) -> List[Dict]:
-        """List folders in Google Drive"""
+        """List folders in Google Drive with pagination support"""
         if not self.service:
             return []
         
@@ -171,18 +171,36 @@ class GoogleDriveManager:
             if parent_folder_id:
                 query += f" and '{parent_folder_id}' in parents"
             
-            results = self.service.files().list(
-                q=query,
-                fields="files(id, name, parents)"
-            ).execute()
+            all_folders = []
+            page_token = None
             
-            return results.get('files', [])
+            # Get all folders with pagination
+            while True:
+                request_params = {
+                    'q': query,
+                    'fields': "nextPageToken, files(id, name, parents)",
+                    'pageSize': 1000  # Maximum allowed
+                }
+                
+                if page_token:
+                    request_params['pageToken'] = page_token
+                
+                results = self.service.files().list(**request_params).execute()
+                
+                folders = results.get('files', [])
+                all_folders.extend(folders)
+                
+                page_token = results.get('nextPageToken')
+                if not page_token:
+                    break
+            
+            return all_folders
         except Exception as e:
             st.error(f"Error listing folders: {str(e)}")
             return []
     
     def list_documents(self, folder_id: str) -> List[Dict]:
-        """List documents in a specific folder"""
+        """List documents in a specific folder with pagination support"""
         if not self.service:
             return []
         
@@ -204,12 +222,30 @@ class GoogleDriveManager:
             query += " or ".join([f"mimeType='{mime}'" for mime in mime_types])
             query += ")"
             
-            results = self.service.files().list(
-                q=query,
-                fields="files(id, name, mimeType, size, modifiedTime)"
-            ).execute()
+            all_files = []
+            page_token = None
             
-            return results.get('files', [])
+            # Get all files with pagination
+            while True:
+                request_params = {
+                    'q': query,
+                    'fields': "nextPageToken, files(id, name, mimeType, size, modifiedTime)",
+                    'pageSize': 1000  # Maximum allowed
+                }
+                
+                if page_token:
+                    request_params['pageToken'] = page_token
+                
+                results = self.service.files().list(**request_params).execute()
+                
+                files = results.get('files', [])
+                all_files.extend(files)
+                
+                page_token = results.get('nextPageToken')
+                if not page_token:
+                    break
+            
+            return all_files
         except Exception as e:
             st.error(f"Error listing documents: {str(e)}")
             return []
@@ -310,6 +346,72 @@ class CloudStorageUI:
                         if documents:
                             st.info(f"📄 Found {len(documents)} documents in this folder")
                             
+                            # Debug button to verify pagination is working
+                            if st.button(f"🔍 Debug: Verify Document Count", key=f"debug_docs_{folder_id}"):
+                                try:
+                                    # Show pagination details
+                                    st.write("**Pagination Test Results:**")
+                                    
+                                    # Test with different page sizes
+                                    test_sizes = [100, 500, 1000]
+                                    for page_size in test_sizes:
+                                        all_files = []
+                                        page_token = None
+                                        page_count = 0
+                                        
+                                        while True:
+                                            page_count += 1
+                                            request_params = {
+                                                'q': f"'{folder_id}' in parents",
+                                                'fields': "nextPageToken, files(id, name, mimeType)",
+                                                'pageSize': page_size
+                                            }
+                                            
+                                            if page_token:
+                                                request_params['pageToken'] = page_token
+                                            
+                                            results = self.gdrive.service.files().list(**request_params).execute()
+                                            
+                                            files = results.get('files', [])
+                                            all_files.extend(files)
+                                            
+                                            page_token = results.get('nextPageToken')
+                                            if not page_token:
+                                                break
+                                        
+                                        st.write(f"- Page size {page_size}: {len(all_files)} total files in {page_count} pages")
+                                    
+                                    # Show file type breakdown
+                                    mime_counts = {}
+                                    supported_count = 0
+                                    supported_types = [
+                                        "application/pdf",
+                                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                        "application/msword",
+                                        "text/csv",
+                                        "text/markdown",
+                                        "text/plain",
+                                        "application/vnd.google-apps.document",
+                                        "application/rtf",
+                                        "application/vnd.oasis.opendocument.text"
+                                    ]
+                                    
+                                    for file in all_files:
+                                        mime_type = file.get('mimeType', 'unknown')
+                                        mime_counts[mime_type] = mime_counts.get(mime_type, 0) + 1
+                                        if mime_type in supported_types:
+                                            supported_count += 1
+                                    
+                                    st.write(f"**Supported documents**: {supported_count}")
+                                    st.write(f"**Total files**: {len(all_files)}")
+                                    st.write("**File types breakdown:**")
+                                    for mime_type, count in sorted(mime_counts.items()):
+                                        status = "✅ Supported" if mime_type in supported_types else "❌ Not supported"
+                                        st.write(f"- {mime_type}: {count} files ({status})")
+                                        
+                                except Exception as e:
+                                    st.error(f"Debug error: {e}")
+                            
                             if st.button("🚀 Sync from Selected Folder", type="primary"):
                                 with st.spinner(f"Syncing from {selected_sync_folder}..."):
                                     downloaded_files = self.gdrive.sync_folder(folder_id, "./documents")
@@ -333,20 +435,52 @@ class CloudStorageUI:
                             # Debug option for subfolders
                             if st.button(f"🔍 Debug: Show All Files in {selected_sync_folder.split(' ')[-1]}", key=f"debug_{folder_id}"):
                                 try:
-                                    all_files = self.gdrive.service.files().list(
-                                        q=f"'{folder_id}' in parents",
-                                        fields="files(id, name, mimeType, size)"
-                                    ).execute()
+                                    # Use pagination to get ALL files
+                                    all_files = []
+                                    page_token = None
                                     
-                                    files = all_files.get('files', [])
-                                    if files:
-                                        st.write(f"**Found {len(files)} total files:**")
-                                        for file in files:
+                                    while True:
+                                        request_params = {
+                                            'q': f"'{folder_id}' in parents",
+                                            'fields': "nextPageToken, files(id, name, mimeType, size)",
+                                            'pageSize': 1000
+                                        }
+                                        
+                                        if page_token:
+                                            request_params['pageToken'] = page_token
+                                        
+                                        results = self.gdrive.service.files().list(**request_params).execute()
+                                        
+                                        files = results.get('files', [])
+                                        all_files.extend(files)
+                                        
+                                        page_token = results.get('nextPageToken')
+                                        if not page_token:
+                                            break
+                                    
+                                    if all_files:
+                                        st.write(f"**Found {len(all_files)} total files (with pagination):**")
+                                        
+                                        # Show first 10 files and count by type
+                                        mime_counts = {}
+                                        for file in all_files:
+                                            mime_type = file.get('mimeType', 'unknown')
+                                            mime_counts[mime_type] = mime_counts.get(mime_type, 0) + 1
+                                        
+                                        st.write("**File types:**")
+                                        for mime_type, count in mime_counts.items():
+                                            st.write(f"- {mime_type}: {count} files")
+                                        
+                                        st.write("**First 10 files:**")
+                                        for file in all_files[:10]:
                                             st.write(f"📄 **{file['name']}**")
                                             st.write(f"   - Type: `{file.get('mimeType', 'unknown')}`")
                                             size = int(file.get('size', 0)) if file.get('size') else 0
                                             st.write(f"   - Size: {size/1024:.1f} KB")
                                             st.write("---")
+                                        
+                                        if len(all_files) > 10:
+                                            st.write(f"... and {len(all_files) - 10} more files")
                                     else:
                                         st.write("**Folder is completely empty**")
                                 except Exception as e:
@@ -365,6 +499,10 @@ class CloudStorageUI:
             
             # Disconnect option
             if st.button("🔓 Disconnect Google Drive"):
+                # Clear the gdrive object credentials
+                self.gdrive.credentials = None
+                self.gdrive.service = None
+                
                 # Clear all persistent storage methods
                 if 'gdrive_credentials' in st.session_state:
                     del st.session_state.gdrive_credentials
@@ -382,6 +520,8 @@ class CloudStorageUI:
                         os.remove('.gdrive_credentials.json')
                 except Exception:
                     pass
+                
+                st.success("✅ Disconnected from Google Drive")
                 st.rerun()
         else:
             self._render_authentication_flow()
