@@ -49,12 +49,35 @@ def initialize_components():
     return config, doc_processor, embeddings_manager, vector_db, session_doc_handler, chat_history_manager
 
 def handle_unified_chat_input(multi_expert_system):
-    """Unified chat input with inline @mention autocomplete"""
+    """Unified chat input with expert quick reference"""
     
-    # Simple chat input with placeholder that hints at @mention functionality
-    placeholder = "Ask about your SOPs or @mention experts (e.g., @QualityExpert, @ManufacturingExpert)..."
+    available_experts = multi_expert_system.get_available_experts()
     
-    # Use regular chat input - streamlit's built-in is cleaner
+    # Show a compact expert reference above the chat input
+    with st.expander("🎯 Quick Expert Reference - Click to expand", expanded=False):
+        st.markdown("**Available Experts (Copy and paste the @mention in your message):**")
+        
+        # Create a clean, copy-friendly list
+        expert_list = list(available_experts.items())
+        
+        # Show in 2 columns for better visibility
+        col1, col2 = st.columns(2)
+        
+        for i, (expert_name, expert_info) in enumerate(expert_list):
+            target_col = col1 if i % 2 == 0 else col2
+            
+            with target_col:
+                # Show @mention in a copyable format
+                st.code(f"@{expert_name}", language=None)
+                st.caption(f"🏷️ {expert_info['title'][:35]}{'...' if len(expert_info['title']) > 35 else ''}")
+                st.caption(f"📋 {', '.join(expert_info['specializations'][:2])}")
+                if i < len(expert_list) - 1:
+                    st.markdown("---")
+        
+        st.info("💡 **How to use:** Copy any @mention above (like `@QualityExpert`) and paste it in your message below.")
+    
+    # Regular chat input with helpful placeholder
+    placeholder = "Ask about your SOPs or @mention experts for specialized insights..."
     user_input = st.chat_input(placeholder)
     
     return user_input
