@@ -377,12 +377,12 @@ class CloudStorageUI:
         
         # Check if client config is in environment variables
         import os
+        import json
         env_client_config = os.getenv('GDRIVE_CLIENT_CONFIG')
         
         if env_client_config:
             st.success("✅ OAuth client configuration found in environment variables")
             try:
-                import json
                 client_config = json.loads(env_client_config)
                 if st.button("🔐 Use Environment Configuration"):
                     auth_url, flow = self.gdrive.setup_oauth_flow(client_config)
