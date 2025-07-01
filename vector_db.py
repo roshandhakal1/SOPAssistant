@@ -1,7 +1,18 @@
+# Fix for Streamlit Cloud SQLite compatibility
+import sys
+import subprocess
+import os
+
+# Install and configure pysqlite3 for Streamlit Cloud
+try:
+    import pysqlite3
+    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+except ImportError:
+    pass
+
 import chromadb
 from chromadb.config import Settings
 from typing import List, Dict, Tuple
-import os
 from pathlib import Path
 
 class VectorDatabase:
