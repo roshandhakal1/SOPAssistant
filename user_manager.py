@@ -266,11 +266,11 @@ class UserManager:
                                     completed = st.session_state.sync_state.get('completed_count', 0)
                                     total = st.session_state.sync_state.get('total_count', len(documents))
                                     st.warning(f"⚠️ Previous sync was interrupted ({completed}/{total} completed)")
-                                    resume_sync = st.button("🔄 Resume Sync", type="primary")
+                                    resume_sync = st.button("🔄 Resume Sync", type="primary", key="resume_sync_btn")
                             
                             # Sync button
                             if resume_sync or st.button("🚀 Sync Documents to Knowledge Base", type="primary", 
-                                       disabled=len(documents) == 0):
+                                       disabled=len(documents) == 0, key="sync_docs_btn"):
                                 # Initialize or restore sync state
                                 if not resume_sync:
                                     st.session_state.sync_state = {
@@ -479,7 +479,7 @@ class UserManager:
             )
             
             if config_json:
-                if st.button("🚀 Connect Google Drive", type="primary"):
+                if st.button("🚀 Connect Google Drive", type="primary", key="connect_gdrive_btn"):
                     try:
                         self._start_google_auth(config_json)
                     except Exception as e:
@@ -508,7 +508,7 @@ class UserManager:
                                          height=100,
                                          placeholder="Either:\n- 4/0AQlEd8w-vniMX...\nOR\n- http://localhost/?state=...&code=4/0AQlEd8w-vniMX...")
                 
-                if auth_input and st.button("✅ Complete Connection"):
+                if auth_input and st.button("✅ Complete Connection", key="complete_connection_btn"):
                     try:
                         # Extract code from input
                         clean_code = auth_input.strip()
