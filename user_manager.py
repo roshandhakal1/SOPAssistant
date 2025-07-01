@@ -483,8 +483,18 @@ class UserManager:
         import os
         import json
         
+        # Clear any cached data first
+        st.cache_data.clear()
+        st.cache_resource.clear()
+        
         st.markdown("### ☁️ Google Drive Integration")
-        st.info("Admin can connect and manage Google Drive for document sync")
+        st.info("🔧 REBUILT: Simple admin connection management")
+        
+        # Show current session state for debugging
+        st.markdown("**Debug Info:**")
+        st.write(f"Session has gdrive_credentials: {'gdrive_credentials' in st.session_state}")
+        st.write(f"Environment has GDRIVE_CREDENTIALS: {'GDRIVE_CREDENTIALS' in os.environ}")
+        st.write(f"File exists: {os.path.exists('.gdrive_credentials.json')}")
         
         # Check if already connected
         has_creds = (
