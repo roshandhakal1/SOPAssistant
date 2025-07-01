@@ -686,64 +686,47 @@ def main():
     
     # Initialize with progress bar if first run
     if 'initialized' not in st.session_state:
-        with st.spinner("Initializing components..."):
-            components = initialize_components()
-            st.session_state.components = components
-            config, doc_processor, embeddings_manager, vector_db, chat_history_manager = components
-            
-            # Get model-specific components
-            rag_handler, expert_consultant, standard_model, expert_model = get_model_components(config, vector_db)
-            
-            # Auto-processing check for new files (if enabled)
-            if st.session_state.get('auto_processing_enabled', False):
-                try:
-                    with st.spinner("🔄 Checking for new files..."):
-                        # Check for updates and auto-process
-                        updates, removed_files, new_index = check_for_updates(
-                            config, doc_processor, embeddings_manager, vector_db
-                        )
-                        
-                        if updates:
-                            with st.spinner(f"🔄 Auto-processing {len(updates)} new files..."):
-                                process_updates(updates, removed_files, new_index, 
-                                              doc_processor, embeddings_manager, vector_db)
-                            st.success(f"✅ Auto-processed {len(updates)} new files!", icon="🤖")
-                except Exception as e:
-                    st.warning(f"Auto-processing check failed: {str(e)}")
-            
-            # Check if this is first run (no documents in DB)
-            if not vector_db.has_documents():
-                st.info("🔄 Knowledge base is empty. Checking for documents...")
-                
-                # Try auto-sync from Google Drive if configured
-                if config.AUTO_SYNC_ON_STARTUP and config.GOOGLE_DRIVE_FOLDER_ID:
-                    try:
-                        from cloud_storage import GoogleDriveManager
-                        gdrive = GoogleDriveManager()
-                        
-                        if gdrive.load_saved_credentials():
-                            with st.spinner("🔄 Auto-syncing from Google Drive..."):
-                                # Use preferred sync folder if set, otherwise use main folder
-                                sync_folder_id = st.session_state.get('preferred_sync_folder', config.GOOGLE_DRIVE_FOLDER_ID)
-                                downloaded_files = gdrive.sync_folder(sync_folder_id, config.SOP_FOLDER)
-                                if downloaded_files:
-                                    folder_name = "preferred subfolder" if sync_folder_id != config.GOOGLE_DRIVE_FOLDER_ID else "main folder"
-                                    st.success(f"✅ Auto-synced {len(downloaded_files)} documents from Google Drive ({folder_name})!")
-                    except Exception as e:
-                        st.warning("⚠️ Auto-sync failed. Contact admin to sync documents.")
-                
-                # Check for any documents (local or synced)
-                updates, removed_files, new_index = check_for_updates(
-                    config, doc_processor, embeddings_manager, vector_db
-                )
-                if updates:
-                    st.info("Found documents. Processing...")
-                    process_updates(updates, removed_files, new_index, 
-                                  doc_processor, embeddings_manager, vector_db)
-                else:
-                    st.info("💡 No documents found. Admin can sync documents in Admin Portal.")
-            
-            st.session_state.initialized = True
+        try:
+            with st.spinner("Initializing components..."):
+                components = initialize_components()
+                st.session_state.components = components
+                config, doc_processor, embeddings_manager, vector_db, chat_history_manager = components
+        except Exception as e:
+            st.error(f"⚠️ Initialization error: {str(e)}")
+            st.info("💡 Try refreshing the page or contact admin if the issue persists.")
+            st.stop()
+        
+        # Get model-specific components
+        rag_handler, expert_consultant, standard_model, expert_model = get_model_components(config, vector_db)
+        
+        # Auto-processing check for new files (if enabled)
+        if st.session_state.get('auto_processing_enabled', False):
+            try:
+                with st.spinner("🔄 Checking for new files..."):
+                    # Check for updates and auto-process
+                    updates, removed_files, new_index = check_for_updates(
+                        config, doc_processor, embeddings_manager, vector_db
+                    )
+                    
+                    if updates:
+                        with st.spinner(f"🔄 Auto-processing {len(updates)} new files..."):
+                            process_updates(updates, removed_files, new_index, 
+                                          doc_processor, embeddings_manager, vector_db)
+                        st.success(f"✅ Auto-processed {len(updates)} new files!", icon="🤖")
+            except Exception as e:
+                st.warning(f"Auto-processing check failed: {str(e)}")
+        
+        # Check if knowledge base is empty (non-blocking)
+        try:
+            has_docs = vector_db.has_documents()
+            if not has_docs:
+                st.info("📊 Knowledge base is empty. App is ready - use Admin Portal to sync documents.")
+                st.caption("💡 Admin can sync from Google Drive in Admin Portal → Integration tab")
+        except Exception as e:
+            st.warning("⚠️ Could not check knowledge base status. App is still functional.")
+            st.caption(f"Debug: {str(e)}")
+        
+        st.session_state.initialized = True
     else:
         # Use cached components if available
         if 'components' in st.session_state:
