@@ -3,6 +3,7 @@
 .streamlit/secrets.toml
 config.ini
 .gdrive_credentials.json
+.user_session.json
 
 # Database and cache
 chroma_db/

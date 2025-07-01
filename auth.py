@@ -8,6 +8,7 @@ import hashlib
 import hmac
 from datetime import datetime, timedelta
 import os
+import json
 from typing import Dict, Optional
 from user_manager import UserManager
 
@@ -16,8 +17,9 @@ class AuthManager:
     
     def __init__(self):
         self.user_manager = UserManager()
-        # Session timeout (4 hours)
+        # Session timeout (4 hours for normal session, 30 days for remember me)
         self.session_timeout = timedelta(hours=4)
+        self.remember_timeout = timedelta(days=30)
     
     def _hash_password(self, password: str) -> str:
         """Hash password using SHA-256."""
@@ -34,20 +36,26 @@ class AuthManager:
     def is_session_valid(self) -> bool:
         """Check if current session is valid."""
         if "authenticated" not in st.session_state:
+            # Try to load from persistent storage
+            if self._load_persistent_session():
+                return True
             return False
         
         if "login_time" not in st.session_state:
             return False
         
-        # Check session timeout
+        # Check session timeout based on remember me
         login_time = st.session_state.login_time
-        if datetime.now() - login_time > self.session_timeout:
+        remember_me = st.session_state.get("remember_me", False)
+        timeout = self.remember_timeout if remember_me else self.session_timeout
+        
+        if datetime.now() - login_time > timeout:
             self.logout()
             return False
         
         return st.session_state.authenticated
     
-    def login(self, user_data: Dict) -> None:
+    def login(self, user_data: Dict, remember_me: bool = False) -> None:
         """Log in user and set session data."""
         st.session_state.authenticated = True
         st.session_state.username = user_data["username"]
@@ -55,10 +63,19 @@ class AuthManager:
         st.session_state.user_name = user_data["name"]
         st.session_state.user_email = user_data.get("email", "")
         st.session_state.login_time = user_data["login_time"]
+        st.session_state.remember_me = remember_me
+        
+        # Save to persistent storage if remember me is checked
+        if remember_me:
+            self._save_persistent_session(user_data)
     
     def logout(self) -> None:
         """Log out user and clear session data."""
-        for key in ["authenticated", "username", "user_role", "user_name", "user_email", "login_time"]:
+        # Clear persistent storage
+        self._clear_persistent_session()
+        
+        # Clear session state
+        for key in ["authenticated", "username", "user_role", "user_name", "user_email", "login_time", "remember_me"]:
             if key in st.session_state:
                 del st.session_state[key]
     
@@ -131,6 +148,7 @@ class AuthManager:
             with st.form("login_form"):
                 username = st.text_input("Username", placeholder="Enter your username")
                 password = st.text_input("Password", type="password", placeholder="Enter your password")
+                remember_me = st.checkbox("Remember me for 30 days", value=True)
                 
                 login_button = st.form_submit_button("Sign In", type="primary", use_container_width=True)
             
@@ -138,7 +156,7 @@ class AuthManager:
                 if username and password:
                     user_data = self.authenticate(username, password)
                     if user_data:
-                        self.login(user_data)
+                        self.login(user_data, remember_me)
                         st.success(f"Welcome back, {user_data['name']}!")
                         st.rerun()
                     else:
@@ -154,6 +172,91 @@ class AuthManager:
         """, unsafe_allow_html=True)
         
         return False
+    
+    def _save_persistent_session(self, user_data: Dict) -> None:
+        """Save session data to persistent storage."""
+        try:
+            session_data = {
+                "username": user_data["username"],
+                "user_role": user_data["role"],
+                "user_name": user_data["name"],
+                "user_email": user_data.get("email", ""),
+                "login_time": user_data["login_time"].isoformat(),
+                "remember_me": True,
+                "expires": (datetime.now() + self.remember_timeout).isoformat()
+            }
+            
+            # Try multiple storage methods
+            # Method 1: Environment variable (works on cloud deployments)
+            os.environ['USER_SESSION'] = json.dumps(session_data)
+            
+            # Method 2: File storage (fallback)
+            try:
+                with open('.user_session.json', 'w') as f:
+                    json.dump(session_data, f)
+            except Exception:
+                pass
+                
+        except Exception:
+            pass  # Fail silently if can't save
+    
+    def _load_persistent_session(self) -> bool:
+        """Load session data from persistent storage."""
+        try:
+            session_data = None
+            
+            # Try environment variable first
+            if 'USER_SESSION' in os.environ:
+                try:
+                    session_data = json.loads(os.environ['USER_SESSION'])
+                except Exception:
+                    pass
+            
+            # Try file storage as fallback
+            if not session_data:
+                try:
+                    with open('.user_session.json', 'r') as f:
+                        session_data = json.load(f)
+                except Exception:
+                    pass
+            
+            if session_data:
+                # Check if session is still valid
+                expires = datetime.fromisoformat(session_data['expires'])
+                if datetime.now() < expires:
+                    # Restore session state
+                    st.session_state.authenticated = True
+                    st.session_state.username = session_data["username"]
+                    st.session_state.user_role = session_data["user_role"]
+                    st.session_state.user_name = session_data["user_name"]
+                    st.session_state.user_email = session_data["user_email"]
+                    st.session_state.login_time = datetime.fromisoformat(session_data["login_time"])
+                    st.session_state.remember_me = True
+                    return True
+                else:
+                    # Expired, clear it
+                    self._clear_persistent_session()
+            
+        except Exception:
+            pass
+        
+        return False
+    
+    def _clear_persistent_session(self) -> None:
+        """Clear persistent session storage."""
+        try:
+            # Clear environment variable
+            if 'USER_SESSION' in os.environ:
+                del os.environ['USER_SESSION']
+            
+            # Clear file
+            try:
+                if os.path.exists('.user_session.json'):
+                    os.remove('.user_session.json')
+            except Exception:
+                pass
+        except Exception:
+            pass
     
     def render_user_info(self) -> None:
         """Render user info in main header area."""
