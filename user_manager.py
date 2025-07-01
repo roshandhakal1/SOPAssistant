@@ -251,32 +251,25 @@ class UserManager:
                 
                 if auth_code and st.button("✅ Complete Connection"):
                     try:
-                        self._complete_google_auth(auth_code)
-                        st.success("🎉 Connected successfully!")
-                        st.rerun()
+                        if self._complete_google_auth(auth_code):
+                            st.success("🎉 Connected successfully!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Authorization failed. Please check your code and try again.")
                     except Exception as e:
                         st.error(f"❌ Authorization failed: {str(e)}")
     
     def _start_google_auth(self, config_json: str):
-        """Start Google OAuth flow"""
+        """Start Google OAuth flow - use the WORKING method from cloud_storage.py"""
         import json
-        from google_auth_oauthlib.flow import Flow
+        from cloud_storage import GoogleDriveManager
         
-        # Parse and validate config
+        # Parse config
         config = json.loads(config_json)
         
-        # Create OAuth flow
-        flow = Flow.from_client_config(
-            config,
-            scopes=['https://www.googleapis.com/auth/drive.readonly'],
-            redirect_uri='urn:ietf:wg:oauth:2.0:oob'
-        )
-        
-        # Generate authorization URL
-        auth_url, _ = flow.authorization_url(
-            prompt='consent',
-            access_type='offline'
-        )
+        # Use the working GoogleDriveManager OAuth flow
+        gdrive = GoogleDriveManager()
+        auth_url, flow = gdrive.setup_oauth_flow(config)
         
         # Store in session
         st.session_state.oauth_flow = flow
@@ -288,38 +281,23 @@ class UserManager:
     def _complete_google_auth(self, auth_code: str):
         """Complete Google OAuth and save credentials"""
         import json
+        from cloud_storage import GoogleDriveManager
         
         # Get flow from session
         flow = st.session_state.oauth_flow
         
-        # Exchange code for credentials
-        flow.fetch_token(code=auth_code)
-        creds = flow.credentials
+        # Use the working GoogleDriveManager method
+        gdrive = GoogleDriveManager()
+        success = gdrive.authenticate_with_code(flow, auth_code)
         
-        # Save credentials
-        cred_data = {
-            'token': creds.token,
-            'refresh_token': creds.refresh_token,
-            'token_uri': creds.token_uri,
-            'client_id': creds.client_id,
-            'client_secret': creds.client_secret,
-            'scopes': creds.scopes
-        }
-        
-        # Store in multiple places for persistence
-        st.session_state.gdrive_credentials = cred_data
-        st.session_state._persistent_gdrive_creds = cred_data
-        os.environ['GDRIVE_CREDENTIALS'] = json.dumps(cred_data)
-        
-        # Save to file
-        with open('.gdrive_credentials.json', 'w') as f:
-            json.dump(cred_data, f)
-        
-        # Clean up session
-        if 'oauth_flow' in st.session_state:
-            del st.session_state.oauth_flow
-        if 'auth_url' in st.session_state:
-            del st.session_state.auth_url
+        if success:
+            # Clean up session
+            if 'oauth_flow' in st.session_state:
+                del st.session_state.oauth_flow
+            if 'auth_url' in st.session_state:
+                del st.session_state.auth_url
+            return True
+        return False
     
     def _disconnect_google_drive(self):
         """Completely disconnect Google Drive"""
