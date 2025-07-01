@@ -181,7 +181,7 @@ class UserManager:
         st.markdown("## 👥 User Management Portal")
         
         # Tabs for different admin functions
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 All Users", "➕ Add User", "⚙️ User Settings", "🤖 Model Settings", "☁️ Cloud Storage"])
+        tab1, tab2, tab3, tab4 = st.tabs(["📋 All Users", "➕ Add User", "⚙️ User Settings", "🤖 Model Settings"])
         
         with tab1:
             self._render_users_list()
@@ -194,9 +194,6 @@ class UserManager:
         
         with tab4:
             self._render_model_settings()
-            
-        with tab5:
-            self._render_cloud_storage_new_v2()
     
     def _render_users_list(self):
         """Render list of all users."""
@@ -478,121 +475,3 @@ class UserManager:
             user_model = current_user.get('model', 'default')
             st.info(f"💡 You are currently using: **{self.available_models.get(user_model, user_model)}**")
     
-    def _render_cloud_storage_new_v2(self):
-        """Simple Google Drive integration for admin."""
-        import os
-        import json
-        
-        # Clear any cached data first
-        st.cache_data.clear()
-        st.cache_resource.clear()
-        
-        st.markdown("### ☁️ Google Drive Integration")
-        st.info("🔧 REBUILT: Simple admin connection management")
-        
-        # Show current session state for debugging
-        st.markdown("**Debug Info:**")
-        st.write(f"Session has gdrive_credentials: {'gdrive_credentials' in st.session_state}")
-        st.write(f"Environment has GDRIVE_CREDENTIALS: {'GDRIVE_CREDENTIALS' in os.environ}")
-        st.write(f"File exists: {os.path.exists('.gdrive_credentials.json')}")
-        
-        # Check if already connected
-        has_creds = (
-            'gdrive_credentials' in st.session_state or 
-            'GDRIVE_CREDENTIALS' in os.environ or 
-            os.path.exists('.gdrive_credentials.json')
-        )
-        
-        if has_creds:
-            # CONNECTED - Show disconnect option
-            st.success("✅ Connected to Google Drive")
-            
-            if st.button("🔓 Disconnect Google Drive", type="secondary"):
-                # Clear everything
-                if 'gdrive_credentials' in st.session_state:
-                    del st.session_state.gdrive_credentials
-                if 'GDRIVE_CREDENTIALS' in os.environ:
-                    del os.environ['GDRIVE_CREDENTIALS']
-                try:
-                    if os.path.exists('.gdrive_credentials.json'):
-                        os.remove('.gdrive_credentials.json')
-                except:
-                    pass
-                st.success("Disconnected!")
-                st.rerun()
-            
-            st.divider()
-            st.info("💡 Go to main app Document Management to sync folders")
-            
-        else:
-            # NOT CONNECTED - Show setup
-            st.warning("Not connected to Google Drive")
-            
-            st.markdown("**Setup Steps:**")
-            st.markdown("1. Go to [Google Cloud Console](https://console.cloud.google.com/)")
-            st.markdown("2. Enable Google Drive API")
-            st.markdown("3. Create OAuth 2.0 credentials (Desktop app)")
-            st.markdown("4. Paste the JSON below:")
-            
-            # JSON input
-            config_text = st.text_area(
-                "OAuth 2.0 Configuration:",
-                placeholder='{"installed":{"client_id":"YOUR_CLIENT_ID","client_secret":"YOUR_SECRET",...}}',
-                height=100
-            )
-            
-            if config_text and st.button("Connect", type="primary"):
-                try:
-                    config_data = json.loads(config_text)
-                    
-                    # Store in environment for persistence
-                    os.environ['GDRIVE_CLIENT_CONFIG'] = config_text
-                    
-                    # Simple auth flow
-                    from google_auth_oauthlib.flow import Flow
-                    
-                    flow = Flow.from_client_config(
-                        config_data,
-                        scopes=['https://www.googleapis.com/auth/drive.readonly'],
-                        redirect_uri='urn:ietf:wg:oauth:2.0:oob'
-                    )
-                    
-                    auth_url, _ = flow.authorization_url(prompt='consent', access_type='offline')
-                    
-                    st.session_state.temp_flow = flow
-                    st.success("✅ Ready for authentication!")
-                    st.markdown(f"**[Click to authorize]({auth_url})**")
-                    
-                except Exception as e:
-                    st.error(f"Error: {e}")
-            
-            # Code input
-            if 'temp_flow' in st.session_state:
-                code = st.text_input("Paste authorization code:")
-                if code and st.button("Complete Setup"):
-                    try:
-                        flow = st.session_state.temp_flow
-                        flow.fetch_token(code=code)
-                        
-                        # Save credentials
-                        creds = flow.credentials
-                        cred_data = {
-                            'token': creds.token,
-                            'refresh_token': creds.refresh_token,
-                            'token_uri': creds.token_uri,
-                            'client_id': creds.client_id,
-                            'client_secret': creds.client_secret,
-                            'scopes': creds.scopes
-                        }
-                        
-                        # Save to session and file
-                        st.session_state.gdrive_credentials = cred_data
-                        with open('.gdrive_credentials.json', 'w') as f:
-                            json.dump(cred_data, f)
-                        
-                        del st.session_state.temp_flow
-                        st.success("🎉 Connected successfully!")
-                        st.rerun()
-                        
-                    except Exception as e:
-                        st.error(f"Auth failed: {e}")
