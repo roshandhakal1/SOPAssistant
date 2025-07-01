@@ -480,73 +480,149 @@ class UserManager:
     
     def _render_cloud_storage(self):
         """Render cloud storage admin settings."""
-        from cloud_storage import CloudStorageUI, GoogleDriveManager
+        from cloud_storage import GoogleDriveManager
+        from config import Config
+        import os
+        import json
         
         st.markdown("### ☁️ Cloud Storage Management")
         st.info("Configure cloud storage integration for all users. Only admins can manage cloud storage settings.")
         
-        # Initialize cloud storage UI with fresh instance
-        cloud_ui = CloudStorageUI()
-        
-        # Add admin-specific disconnect option at the top
+        # Initialize fresh Google Drive manager
         gdrive = GoogleDriveManager()
+        config = Config()
+        
+        # Check connection status
         if gdrive.load_saved_credentials():
-            st.success("✅ Connected to Google Drive (Admin)")
+            # CONNECTED STATE
+            st.success("✅ Connected to Google Drive")
             
-            col1, col2 = st.columns([3, 1])
+            # Disconnect button
+            col1, col2 = st.columns([4, 1])
             with col2:
-                if st.button("🔓 Disconnect", type="secondary", key="admin_disconnect"):
-                    # Clear the gdrive object credentials
+                if st.button("🔓 Disconnect", type="secondary", key="admin_disconnect_simple"):
+                    # Complete cleanup
                     gdrive.credentials = None
                     gdrive.service = None
                     
-                    # Clear all persistent storage methods
-                    if 'gdrive_credentials' in st.session_state:
-                        del st.session_state.gdrive_credentials
-                    if hasattr(st.session_state, '_persistent_gdrive_creds'):
-                        del st.session_state._persistent_gdrive_creds
+                    # Clear session state
+                    for key in ['gdrive_credentials', '_persistent_gdrive_creds']:
+                        if key in st.session_state:
+                            del st.session_state[key]
                     
-                    # Clear environment variable
-                    import os
+                    # Clear environment
                     if 'GDRIVE_CREDENTIALS' in os.environ:
                         del os.environ['GDRIVE_CREDENTIALS']
                     
-                    # Remove persistent file
+                    # Clear file
                     try:
                         if os.path.exists('.gdrive_credentials.json'):
                             os.remove('.gdrive_credentials.json')
-                    except Exception:
+                    except:
                         pass
                     
-                    st.success("✅ Disconnected from Google Drive")
+                    st.success("✅ Disconnected successfully!")
                     st.rerun()
-        
-        st.divider()
-        
-        # Add admin debug section
-        if gdrive.load_saved_credentials():
-            with st.expander("🔧 Admin Debug Tools", expanded=False):
-                st.markdown("**Debug Google Drive Pagination:**")
+            
+            st.divider()
+            
+            # Show folder information
+            if config.GOOGLE_DRIVE_FOLDER_ID:
+                st.markdown(f"**📂 Main Folder:** Gemini Training")
+                st.code(config.GOOGLE_DRIVE_FOLDER_ID)
                 
-                from config import Config
-                config = Config()
+                # Get and display subfolders with real counts
+                with st.spinner("Loading folders..."):
+                    subfolders = gdrive.list_folders(config.GOOGLE_DRIVE_FOLDER_ID)
                 
-                if st.button("🔄 Force Refresh Folder Counts", key="admin_refresh"):
-                    # Clear any cached results
-                    if hasattr(st.session_state, '_cached_folder_counts'):
-                        del st.session_state._cached_folder_counts
+                if subfolders:
+                    st.markdown("**📁 Available Subfolders:**")
                     
-                    # Test pagination on main folder
-                    if config.GOOGLE_DRIVE_FOLDER_ID:
-                        with st.spinner("Testing pagination..."):
-                            # Get subfolders
-                            subfolders = gdrive.list_folders(config.GOOGLE_DRIVE_FOLDER_ID)
-                            st.write(f"**Found {len(subfolders)} subfolders:**")
+                    # Show each subfolder with document count
+                    for folder in subfolders:
+                        with st.expander(f"📁 {folder['name']}", expanded=True):
+                            # Get real document count with pagination
+                            with st.spinner(f"Counting documents in {folder['name']}..."):
+                                documents = gdrive.list_documents(folder['id'])
                             
-                            for folder in subfolders:
-                                # Test document count with pagination
-                                docs = gdrive.list_documents(folder['id'])
-                                st.write(f"- 📁 **{folder['name']}**: {len(docs)} documents")
-        
-        # Show the main cloud storage UI
-        cloud_ui.render_google_drive_setup()
+                            st.info(f"📄 **{len(documents)} documents** found")
+                            
+                            # Sync button for this folder
+                            if st.button(f"🚀 Sync {folder['name']} to Knowledge Base", 
+                                       key=f"sync_{folder['id']}", type="primary"):
+                                with st.spinner(f"Syncing {len(documents)} documents..."):
+                                    # Clear documents folder first
+                                    import shutil
+                                    from pathlib import Path
+                                    
+                                    if Path(config.SOP_FOLDER).exists():
+                                        shutil.rmtree(config.SOP_FOLDER)
+                                    Path(config.SOP_FOLDER).mkdir(parents=True, exist_ok=True)
+                                    
+                                    # Download all files
+                                    downloaded_files = gdrive.sync_folder(folder['id'], config.SOP_FOLDER)
+                                    
+                                    if downloaded_files:
+                                        st.success(f"✅ Successfully synced {len(downloaded_files)} documents!")
+                                        st.info("💡 Documents are now ready for the knowledge base.")
+                                    else:
+                                        st.error("❌ No documents were downloaded")
+                            
+                            # Show sample files
+                            if documents:
+                                with st.expander("📋 Show first 10 files", expanded=False):
+                                    for i, doc in enumerate(documents[:10]):
+                                        st.text(f"📄 {doc['name']}")
+                                    if len(documents) > 10:
+                                        st.text(f"... and {len(documents) - 10} more files")
+                else:
+                    st.warning("No subfolders found in main folder")
+            
+        else:
+            # NOT CONNECTED STATE
+            st.warning("🔗 Not connected to Google Drive")
+            
+            st.markdown("**To connect Google Drive:**")
+            st.markdown("1. Get your OAuth credentials from Google Cloud Console")
+            st.markdown("2. Paste the JSON configuration below")
+            st.markdown("3. Complete the authentication flow")
+            
+            # Simple authentication flow
+            client_config_text = st.text_area(
+                "OAuth 2.0 Client Configuration (JSON):",
+                placeholder='{"installed":{"client_id":"...","client_secret":"...","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","redirect_uris":["urn:ietf:wg:oauth:2.0:oob","http://localhost"]}}',
+                height=150
+            )
+            
+            if client_config_text and st.button("🔐 Start Authentication", type="primary"):
+                try:
+                    client_config = json.loads(client_config_text)
+                    auth_url, flow = gdrive.setup_oauth_flow(client_config)
+                    
+                    # Store flow in session state
+                    st.session_state.oauth_flow = flow
+                    st.session_state.client_config = client_config
+                    
+                    st.success("✅ Configuration valid!")
+                    st.markdown(f"**[Click here to authorize access]({auth_url})**")
+                    st.info("Copy the authorization code and paste it below:")
+                    
+                    with st.expander("Having trouble? Copy this URL manually:", expanded=False):
+                        st.code(auth_url, language=None)
+                        
+                except json.JSONDecodeError:
+                    st.error("❌ Invalid JSON format")
+                except Exception as e:
+                    st.error(f"❌ Configuration error: {str(e)}")
+            
+            # Authorization code input
+            if 'oauth_flow' in st.session_state:
+                auth_code = st.text_input("Enter authorization code:")
+                if auth_code and st.button("✅ Complete Authentication"):
+                    if gdrive.authenticate_with_code(st.session_state.oauth_flow, auth_code):
+                        st.success("🎉 Successfully connected to Google Drive!")
+                        # Clean up session state
+                        del st.session_state.oauth_flow
+                        st.rerun()
+                    else:
+                        st.error("❌ Authentication failed")
