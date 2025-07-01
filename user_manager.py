@@ -1,5 +1,6 @@
 """
-COMPLETELY NEW USER MANAGER - FORCE REBUILD
+COMPLETELY NEW USER MANAGER - FORCE REBUILD v2.0
+Fixed AttributeError: get_user_model method added back
 """
 import streamlit as st
 import json
@@ -76,7 +77,7 @@ class UserManager:
         return self.users
     
     def get_user_model(self, username: str, mode: str = "standard") -> str:
-        """Get the effective model for a user."""
+        """Get the effective model for a user - FIXED VERSION v2.0"""
         user = self.users.get(username, {})
         user_model = user.get('model', 'default')
         
@@ -89,6 +90,11 @@ class UserManager:
         
         # User has specific model preference
         return user_model
+    
+    def debug_methods(self):
+        """Debug method to check if class is properly loaded"""
+        methods = [method for method in dir(self) if not method.startswith('_')]
+        return f"UserManager v2.0 methods: {methods}"
     
     def render_admin_portal(self):
         """COMPLETELY NEW ADMIN PORTAL - NO CLOUD STORAGE TAB!"""
