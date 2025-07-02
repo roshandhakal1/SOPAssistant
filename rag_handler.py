@@ -136,10 +136,18 @@ CONVERSATIONAL, STAKEHOLDER-FRIENDLY ANSWER:"""
         response = self.model.generate_content(prompt, generation_config=generation_config)
         answer = response.text
         
-        # Clean up any SOP names that might have been included despite instructions
+        # Clean up SOP names and track which ones were referenced
         import re
-        # Remove SOP file references from stakeholder responses
         sop_pattern = r'\b([A-Za-z0-9\-\_\(\)\s]+(?:Rev\d+(?:Draft\d+)?)?[A-Za-z0-9\-\_\(\)\s]*\.(doc|docx|pdf))\b'
+        
+        # Find all SOP names that were mentioned in the original response
+        referenced_sops = set()
+        sop_matches = re.findall(sop_pattern, answer)
+        for match in sop_matches:
+            if isinstance(match, tuple):
+                referenced_sops.add(match[0])  # Full filename
+            else:
+                referenced_sops.add(match)
         
         # Remove SOP filenames from the response text for cleaner stakeholder presentation
         formatted_answer = re.sub(sop_pattern, '[document reference removed]', answer)
@@ -151,17 +159,34 @@ CONVERSATIONAL, STAKEHOLDER-FRIENDLY ANSWER:"""
         formatted_answer = re.sub(r'\[document reference removed\]\s*and\s*\[document reference removed\]', 'our procedures', formatted_answer)
         formatted_answer = re.sub(r'\[document reference removed\]', 'our procedures', formatted_answer)
         
-        # Return sources with metadata (including Google Drive links if available)
+        # Only return sources that were actually referenced OR the top 5 most relevant
         sources_with_metadata = []
         seen_files = set()
+        
+        # First, add sources that were explicitly referenced in the response
         for meta in metadatas:
             filename = meta['filename']
             if filename not in seen_files:
-                seen_files.add(filename)
-                source_info = {'filename': filename}
-                if 'gdrive_link' in meta:
-                    source_info['gdrive_link'] = meta['gdrive_link']
-                sources_with_metadata.append(source_info)
+                # Check if this file was mentioned in the response
+                if any(ref in filename for ref in referenced_sops):
+                    seen_files.add(filename)
+                    source_info = {'filename': filename}
+                    if 'gdrive_link' in meta:
+                        source_info['gdrive_link'] = meta['gdrive_link']
+                    sources_with_metadata.append(source_info)
+        
+        # If no explicit references found or very few, add top relevant sources
+        if len(sources_with_metadata) < 3:
+            for meta in metadatas[:5]:  # Top 5 most relevant
+                filename = meta['filename']
+                if filename not in seen_files:
+                    seen_files.add(filename)
+                    source_info = {'filename': filename}
+                    if 'gdrive_link' in meta:
+                        source_info['gdrive_link'] = meta['gdrive_link']
+                    sources_with_metadata.append(source_info)
+                    if len(sources_with_metadata) >= 5:
+                        break
         
         return formatted_answer, sources_with_metadata
     
