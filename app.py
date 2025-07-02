@@ -896,20 +896,23 @@ def main():
                     
                     st.markdown(response, unsafe_allow_html=True)
                     
-                    # Show SOP sources
+                    # Show SOP sources in a clean, collapsed format
                     if sop_sources:
-                        st.markdown("<hr style='margin: 1.5rem 0; border: none; border-top: 1px solid rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
-                        st.markdown("##### 📎 Referenced SOPs")
-                        for source in sop_sources:
-                            if isinstance(source, dict) and 'gdrive_link' in source:
-                                # Source with Google Drive link
-                                st.markdown(f'<span class="sop-reference">{source["filename"]}</span> [📁 Open in Drive]({source["gdrive_link"]})', unsafe_allow_html=True)
-                            elif isinstance(source, dict):
-                                # Source without link
-                                st.markdown(f'<span class="sop-reference">{source["filename"]}</span>', unsafe_allow_html=True)
-                            else:
-                                # Legacy format (just filename string)
-                                st.markdown(f'<span class="sop-reference">{source}</span>', unsafe_allow_html=True)
+                        with st.expander(f"📎 Reference Documents ({len(sop_sources)})", expanded=False):
+                            for i, source in enumerate(sop_sources[:10]):  # Show max 10
+                                if isinstance(source, dict) and 'gdrive_link' in source:
+                                    # Clean filename display
+                                    filename = source["filename"].replace(".doc", "").replace(".docx", "")
+                                    st.markdown(f"{i+1}. [{filename}]({source['gdrive_link']})")
+                                elif isinstance(source, dict):
+                                    filename = source["filename"].replace(".doc", "").replace(".docx", "")
+                                    st.markdown(f"{i+1}. {filename}")
+                                else:
+                                    filename = str(source).replace(".doc", "").replace(".docx", "")
+                                    st.markdown(f"{i+1}. {filename}")
+                            
+                            if len(sop_sources) > 10:
+                                st.caption(f"... and {len(sop_sources) - 10} more documents")
         
         st.session_state.messages.append({"role": "assistant", "content": response})
     
