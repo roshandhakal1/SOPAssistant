@@ -117,9 +117,11 @@ Think of this as briefing an executive on what their QA department actually does
 
 Format your response naturally with:
 - Clear headings for main activity areas
-- Specific examples from the SOPs
+- Specific examples and processes from the SOPs
 - Business impact of each function
 - Comprehensive coverage of all major activities
+- DO NOT include SOP document names in your response (they'll be listed separately)
+- Focus on WHAT they do and WHY it matters, not WHICH documents describe it
 
 CONVERSATIONAL, STAKEHOLDER-FRIENDLY ANSWER:"""
         
@@ -134,22 +136,20 @@ CONVERSATIONAL, STAKEHOLDER-FRIENDLY ANSWER:"""
         response = self.model.generate_content(prompt, generation_config=generation_config)
         answer = response.text
         
-        # Format SOP names in the response with HTML spans
+        # Clean up any SOP names that might have been included despite instructions
         import re
-        # More precise pattern to match SOP filenames (including revision numbers and special characters)
+        # Remove SOP file references from stakeholder responses
         sop_pattern = r'\b([A-Za-z0-9\-\_\(\)\s]+(?:Rev\d+(?:Draft\d+)?)?[A-Za-z0-9\-\_\(\)\s]*\.(doc|docx|pdf))\b'
         
-        def format_sop(match):
-            sop_name = match.group(1)
-            # Clean up any existing HTML tags
-            clean_name = re.sub(r'<[^>]+>', '', sop_name)
-            return f'<span class="sop-reference-inline">{clean_name}</span>'
+        # Remove SOP filenames from the response text for cleaner stakeholder presentation
+        formatted_answer = re.sub(sop_pattern, '[document reference removed]', answer)
         
-        # Replace SOP names with formatted versions, but avoid double-formatting
-        if '<span class="sop-reference-inline">' not in answer:
-            formatted_answer = re.sub(sop_pattern, format_sop, answer)
-        else:
-            formatted_answer = answer
+        # Clean up any leftover HTML spans
+        formatted_answer = re.sub(r'<span class="sop-reference-inline">([^<]+)</span>', r'\1', formatted_answer)
+        
+        # Clean up artifacts from removal
+        formatted_answer = re.sub(r'\[document reference removed\]\s*and\s*\[document reference removed\]', 'our procedures', formatted_answer)
+        formatted_answer = re.sub(r'\[document reference removed\]', 'our procedures', formatted_answer)
         
         # Return sources with metadata (including Google Drive links if available)
         sources_with_metadata = []
