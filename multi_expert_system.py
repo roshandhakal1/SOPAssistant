@@ -61,57 +61,91 @@ class ExpertPersona:
             USER QUERY: {query}
             CONTEXT: {chr(10).join(context) if context else "No specific context"}
 
-            CRITICAL INSTRUCTIONS FOR MARKET RESEARCH:
+            CRITICAL INSTRUCTIONS FOR COMPREHENSIVE MARKET RESEARCH:
             
-            1. **ACTUAL PRODUCT RESEARCH**: Find and analyze real competing products
-               - Search for actual product names, brands, and competitors
-               - Identify specific product SKUs and variations
-               - Look up actual ingredient lists and formulations
+            1. **DETAILED PRODUCT RESEARCH WITH SOURCES**: 
+               - Find actual competing products with real product names, brands, and SKUs
+               - Provide direct product URLs from Amazon, iHerb, Vitacost, CVS, Walgreens
+               - Include actual ingredient lists and formulations with sources
+               - Reference manufacturer websites and official product pages
             
-            2. **REAL PRICING DATA**: Collect current market pricing
-               - Find actual prices from Amazon, iHerb, Vitacost, CVS, Walgreens
-               - Include price per unit and price per serving calculations
-               - Note any current promotions or discounts
+            2. **COMPREHENSIVE PRICING INTELLIGENCE**:
+               - Collect current pricing from multiple retailers with exact URLs
+               - Include price per unit, price per serving, bulk pricing, subscription discounts
+               - Track pricing history and seasonal variations when available
+               - Note current promotions, coupon codes, and special offers with links
             
-            3. **ACTUAL URLS AND SOURCES**: Provide real references
-               - Include actual product URLs where data was found
-               - Reference specific retailer pages and product listings
-               - Cite actual review platforms and rating sources
+            3. **DETAILED CUSTOMER SENTIMENT ANALYSIS**:
+               - Analyze customer reviews from Amazon, iHerb, Vitacost, Walmart, Target
+               - Include direct URLs to review pages and specific review analysis
+               - Provide actual star ratings, review counts, and sentiment breakdowns
+               - Quote specific customer feedback (positive and negative) with review dates
+               - Analyze review trends over time and identify common themes
             
-            4. **REAL CUSTOMER REVIEWS**: Analyze actual customer feedback
-               - Summarize real customer reviews from Amazon, iHerb, etc.
-               - Include actual star ratings and review counts
-               - Quote specific customer complaints and praise
+            4. **FINANCIAL & MARKET SHARE DATA**:
+               - Research actual revenue data from SEC filings, annual reports, investor presentations
+               - Include market share percentages from credible research firms (IBISWorld, Euromonitor, Grand View Research)
+               - Provide URLs to actual financial reports and market research documents
+               - Include recent fundraising, IPOs, acquisitions, or financial announcements
+               - Reference actual press releases and investor relations pages
             
-            5. **FACTUAL MARKET DATA**: Use real market intelligence
-               - Reference actual market research reports and data
-               - Include real market share percentages when available
-               - Cite specific industry trends and growth rates
+            5. **COMPREHENSIVE MARKET INTELLIGENCE**:
+               - Research actual market research reports with publisher names and URLs
+               - Include industry growth rates, market size data, and forecasts with sources
+               - Reference trade publications, industry associations, and expert analyses
+               - Cite specific analyst reports and market studies with publication dates
             
-            6. **COMPETITIVE ANALYSIS**: Compare real product specifications
-               - Create actual ingredient-by-ingredient comparisons
-               - Compare real dosages, forms, and bioavailability
-               - Analyze actual packaging, serving sizes, and formats
+            6. **PUBLIC RELATIONS & MEDIA ANALYSIS**:
+               - Research recent PR announcements, product launches, and media coverage
+               - Include URLs to actual press releases, news articles, and media mentions
+               - Analyze social media presence and engagement metrics with platform links
+               - Track advertising campaigns and marketing initiatives with examples
+               - Monitor regulatory approvals, certifications, and compliance announcements
             
-            RESEARCH METHODOLOGY:
-            - Search major e-commerce platforms for competing products
-            - Analyze product listings, descriptions, and customer reviews
-            - Compare actual prices across multiple retailers
-            - Research brand websites and official product information
-            - Look up market research reports and industry publications
+            7. **COMPETITIVE INTELLIGENCE WITH VERIFICATION**:
+               - Create detailed ingredient-by-ingredient comparisons with sourced data
+               - Include actual clinical studies, research papers, and scientific backing
+               - Provide URLs to published research and third-party testing results
+               - Analyze patent filings, trademarks, and intellectual property with USPTO links
+               - Reference actual certifications (NSF, USP, organic) with verification links
             
-            FORMAT REQUIREMENTS:
-            - Include actual product names and brand names
-            - Provide real URLs for all products and sources referenced
-            - Show actual pricing data with retailer names and dates
-            - Include real customer review snippets and ratings
-            - Reference actual market data sources and publications
+            COMPREHENSIVE RESEARCH METHODOLOGY:
+            - Search major e-commerce platforms (Amazon, iHerb, Vitacost, CVS, Walgreens, Target, Walmart)
+            - Analyze SEC filings, 10-K reports, and investor presentations for financial data
+            - Research market intelligence firms (IBISWorld, Euromonitor, Grand View Research, Fortune Business Insights)
+            - Monitor financial news sources (Reuters, Bloomberg, Yahoo Finance, MarketWatch)
+            - Track social media presence (Instagram, Facebook, Twitter, LinkedIn) with engagement metrics
+            - Analyze press releases from PR Newswire, Business Wire, and company investor relations
+            - Research patent databases (USPTO), trademark filings, and regulatory approvals
+            - Study trade publications and industry associations (CRN, AHPA, NBJ)
+            - Monitor review aggregation sites and sentiment analysis tools
             
-            AVOID:
-            - Generic statements without specific data
-            - Placeholder text or hypothetical examples
-            - Vague references to "market analysis suggests"
-            - Made-up product names or fictional pricing
+            DETAILED FORMAT REQUIREMENTS:
+            
+            **Executive Summary** (2-3 key findings with sources)
+            **Competitive Landscape** (Top 5-10 competitors with company websites)
+            **Product Analysis** (Direct product URLs, ingredient comparisons, pricing tables)
+            **Financial Performance** (Revenue data with SEC filing URLs, market share with research source URLs)
+            **Customer Sentiment Analysis** (Review URLs, rating breakdowns, sentiment trends)
+            **Market Intelligence** (Research report URLs, analyst coverage, industry forecasts)
+            **PR & Media Coverage** (Press release URLs, news article links, social media metrics)
+            **Strategic Recommendations** (Data-driven insights with supporting evidence)
+            
+            SOURCE VERIFICATION REQUIREMENTS:
+            - Every claim must include a clickable URL or specific source citation
+            - Financial data must reference SEC filings, investor presentations, or credible financial reports
+            - Market share data must cite specific research firm reports with publication dates
+            - Customer sentiment must include direct links to review pages and specific review counts
+            - PR coverage must include actual press release URLs and media mention links
+            - Product data must include direct retailer URLs and manufacturer specification sheets
+            
+            CRITICAL QUALITY STANDARDS:
+            - NO generic statements without verifiable sources
+            - NO placeholder text or hypothetical data
+            - NO vague market references without specific report citations
+            - NO revenue estimates without actual financial document sources
+            - EVERY URL must be real and verifiable
+            - EVERY statistic must have a credible source attribution
             
             Deliver a comprehensive market intelligence report with real, actionable data that a business can immediately use for decision-making.
             """
