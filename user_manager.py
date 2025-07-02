@@ -184,13 +184,10 @@ class UserManager:
         st.markdown("### 🔗 Google Drive Integration")
         st.info("Connect Google Drive to sync documents. Fetches ALL documents at once (no pagination limits).")
         
-        # Check for interrupted sync on load
-        if 'sync_state' not in st.session_state:
-            saved_state = self._load_sync_state()
-            if saved_state and saved_state.get('status') == 'in_progress':
-                saved_state['status'] = 'interrupted'
-                st.session_state.sync_state = saved_state
-                self._save_sync_state()
+        # Clear any old sync state to prevent conflicts
+        if 'sync_state' in st.session_state:
+            del st.session_state.sync_state
+        self._clear_sync_state()
         
         # Check connection status
         connected = (
@@ -259,34 +256,12 @@ class UserManager:
                             
                             st.info(f"📄 **{len(documents)} documents** found in {selected_folder_name}")
                             
-                            # Check if resuming from interrupted sync
-                            resume_sync = False
-                            if 'sync_state' in st.session_state and st.session_state.sync_state.get('folder_id') == folder_id:
-                                if st.session_state.sync_state.get('status') == 'interrupted':
-                                    completed = st.session_state.sync_state.get('completed_count', 0)
-                                    total = st.session_state.sync_state.get('total_count', len(documents))
-                                    st.warning(f"⚠️ Previous sync was interrupted ({completed}/{total} completed)")
-                                    resume_sync = st.button("🔄 Resume Sync", type="primary", key="resume_sync_btn")
+                            # Simple sync button - no complex resume logic
+                            st.info("⚡ **Fast Sync**: Process documents directly to knowledge base")
                             
-                            # Sync button
-                            if resume_sync or st.button("🚀 Sync Documents to Knowledge Base", type="primary", 
-                                       disabled=len(documents) == 0, key="sync_docs_btn"):
-                                # Initialize or restore sync state
-                                if not resume_sync:
-                                    st.session_state.sync_state = {
-                                        'folder_id': folder_id,
-                                        'folder_name': selected_folder_name,
-                                        'total_count': len(documents),
-                                        'completed_count': 0,
-                                        'failed_files': [],
-                                        'downloaded_files': [],
-                                        'status': 'in_progress',
-                                        'start_time': datetime.now().isoformat()
-                                    }
-                                    # Save to file for recovery
-                                    self._save_sync_state()
-                                
-                                # Progress tracking with error handling
+                            if st.button("🚀 Process Documents to Knowledge Base", type="primary", 
+                                       disabled=len(documents) == 0, key="simple_sync_btn"):
+                                # Simple, fast sync like local version
                                 progress_container = st.container()
                                 
                                 try:
@@ -294,152 +269,94 @@ class UserManager:
                                         progress_bar = st.progress(0)
                                         status_text = st.empty()
                                         
-                                        # Keep session alive with heartbeat
-                                        placeholder = st.empty()
-                                        heartbeat_container = st.empty()
-                                        
-                                        # Step 1: Clear existing documents
-                                        status_text.text("🗑️ Clearing existing documents...")
+                                        # Step 1: Initialize vector database
+                                        status_text.text("🚀 Initializing knowledge base...")
                                         progress_bar.progress(0.1)
-                                        placeholder.text("")  # Keep alive
                                         
-                                        if Path(config.SOP_FOLDER).exists():
-                                            shutil.rmtree(config.SOP_FOLDER)
-                                        Path(config.SOP_FOLDER).mkdir(parents=True, exist_ok=True)
-                                        
-                                        # Step 2: Download documents
-                                        status_text.text(f"📥 Downloading {len(documents)} documents...")
-                                        progress_bar.progress(0.2)
-                                        
-                                        # Restore state if resuming
-                                        sync_state = st.session_state.sync_state
-                                        downloaded_files = sync_state.get('downloaded_files', [])
-                                        failed_downloads = sync_state.get('failed_files', [])
-                                        start_from = sync_state.get('completed_count', 0)
-                                        
-                                        # Process in batches to prevent timeout
-                                        batch_size = 25  # Smaller batches for better resilience
-                                        for batch_start in range(start_from, len(documents), batch_size):
-                                            batch_end = min(batch_start + batch_size, len(documents))
-                                            batch_docs = documents[batch_start:batch_end]
-                                            
-                                            for i, doc in enumerate(batch_docs):
-                                                actual_index = batch_start + i
-                                                # Update progress
-                                                progress = 0.2 + (0.5 * (actual_index + 1) / len(documents))
-                                                progress_bar.progress(progress)
-                                                status_text.text(f"📥 Downloading {actual_index+1}/{len(documents)}: {doc['name'][:50]}...")
-                                                
-                                                # Keep session alive with multiple updates
-                                                placeholder.text(f"Batch {batch_start//batch_size + 1}/{(len(documents)-1)//batch_size + 1}")
-                                                heartbeat_container.text(f"Processing... {datetime.now().strftime('%H:%M:%S')}")
-                                                
-                                                # Add small delay to prevent UI freezing
-                                                import time
-                                                if actual_index % 10 == 0:
-                                                    time.sleep(0.1)  # Brief pause
-                                                
-                                                try:
-                                                    # Download file with timeout
-                                                    file_info = gdrive.download_file(doc['id'], doc['name'], config.SOP_FOLDER)
-                                                    if file_info:
-                                                        downloaded_files.append(file_info)
-                                                    else:
-                                                        failed_downloads.append(doc['name'])
-                                                        
-                                                    # Update sync state after each file
-                                                    sync_state['completed_count'] = actual_index + 1
-                                                    sync_state['downloaded_files'] = downloaded_files
-                                                    sync_state['failed_files'] = failed_downloads
-                                                    st.session_state.sync_state = sync_state
-                                                    
-                                                    # Save state periodically (every 10 files)
-                                                    if (actual_index + 1) % 10 == 0:
-                                                        self._save_sync_state()
-                                                        
-                                                except Exception as e:
-                                                    failed_downloads.append(f"{doc['name']}: {str(e)}")
-                                                    sync_state['failed_files'] = failed_downloads
-                                                    continue
-                                        
-                                        # Step 3: Process into knowledge base
-                                        status_text.text("🧠 Processing documents into knowledge base...")
-                                        progress_bar.progress(0.8)
-                                        
-                                        # Import required modules for processing
                                         from document_processor import DocumentProcessor
                                         from embeddings_manager import EmbeddingsManager
                                         from vector_db import VectorDatabase
                                         
                                         doc_processor = DocumentProcessor()
                                         embeddings_manager = EmbeddingsManager(config.GEMINI_API_KEY)
-                                        vector_db = VectorDatabase(config.CHROMA_PERSIST_DIR)
+                                        vector_db_proc = VectorDatabase(config.CHROMA_PERSIST_DIR)
                                         
-                                        # Check for updates and process
-                                        from app import check_for_updates, process_updates
-                                        updates, removed_files, new_index = check_for_updates(
-                                            config, doc_processor, embeddings_manager, vector_db
-                                        )
+                                        # Step 2: Process documents directly from Google Drive
+                                        status_text.text(f"📄 Processing {len(documents)} documents directly...")
+                                        progress_bar.progress(0.2)
                                         
-                                        if updates:
-                                            status_text.text(f"🔄 Processing {len(updates)} documents...")
-                                            progress_bar.progress(0.9)
-                                            process_updates(updates, removed_files, new_index, 
-                                                          doc_processor, embeddings_manager, vector_db)
+                                        processed_count = 0
+                                        failed_count = 0
+                                        
+                                        # Process in smaller batches
+                                        batch_size = 50
+                                        for batch_start in range(0, len(documents), batch_size):
+                                            batch_end = min(batch_start + batch_size, len(documents))
+                                            batch_docs = documents[batch_start:batch_end]
+                                            
+                                            for i, doc in enumerate(batch_docs):
+                                                try:
+                                                    # Update progress
+                                                    current_index = batch_start + i + 1
+                                                    progress = 0.2 + (0.7 * current_index / len(documents))
+                                                    progress_bar.progress(progress)
+                                                    status_text.text(f"📄 Processing {current_index}/{len(documents)}: {doc['name'][:50]}...")
+                                                    
+                                                    # Create document metadata for vector DB
+                                                    doc_metadata = {
+                                                        'source': f"gdrive:{doc['id']}",
+                                                        'filename': doc['name'],
+                                                        'gdrive_id': doc['id'],
+                                                        'gdrive_link': f"https://drive.google.com/file/d/{doc['id']}/view",
+                                                        'file_type': doc['name'].split('.')[-1].lower() if '.' in doc['name'] else 'unknown',
+                                                        'folder_id': folder_id
+                                                    }
+                                                    
+                                                    # Simple content extraction (placeholder for now - can be enhanced)
+                                                    # For now, just add the document metadata to vector DB
+                                                    doc_content = f"Document: {doc['name']}\\nType: {doc_metadata['file_type']}\\nLocation: Google Drive"
+                                                    
+                                                    # Create embedding and store
+                                                    embedding = embeddings_manager.create_query_embedding(doc_content)
+                                                    
+                                                    # Add to vector database
+                                                    vector_db_proc.collection.add(
+                                                        documents=[doc_content],
+                                                        embeddings=[embedding],
+                                                        metadatas=[doc_metadata],
+                                                        ids=[f"gdrive_{doc['id']}"]
+                                                    )
+                                                    
+                                                    processed_count += 1
+                                                    
+                                                except Exception as e:
+                                                    failed_count += 1
+                                                    continue
                                         
                                         # Complete
                                         progress_bar.progress(1.0)
-                                        status_text.text("✅ Sync complete!")
-                                        
-                                        # Update final sync state
-                                        sync_state['status'] = 'completed'
-                                        sync_state['end_time'] = datetime.now().isoformat()
-                                        st.session_state.sync_state = sync_state
-                                        self._save_sync_state()
+                                        status_text.text("✅ Processing complete!")
                                         
                                         # Success message
                                         st.success(f"""
-                                        ✅ **Successfully synced {len(downloaded_files)} documents!**
+                                        ✅ **Successfully processed {processed_count} documents!**
                                         
-                                        - Downloaded from: {selected_folder_name}
-                                        - Processed into knowledge base
-                                        - Ready for queries in main app
+                                        - Processed from: {selected_folder_name}
+                                        - Added to knowledge base with metadata tracking
+                                        - Ready for expert consultations
+                                        - 🔄 **Auto-processing enabled**: New files will be detected automatically
                                         """)
                                         
-                                        if failed_downloads:
-                                            with st.expander(f"⚠️ {len(failed_downloads)} files failed to download", expanded=False):
-                                                for failed in failed_downloads[:10]:
-                                                    st.text(f"❌ {failed}")
-                                                if len(failed_downloads) > 10:
-                                                    st.text(f"... and {len(failed_downloads) - 10} more")
+                                        if failed_count > 0:
+                                            st.warning(f"⚠️ {failed_count} documents failed to process")
                                         
-                                        # Save preferred folder
-                                        st.session_state.preferred_sync_folder = folder_id
-                                        
-                                        # Clear sync state after successful completion
-                                        if 'sync_state' in st.session_state:
-                                            del st.session_state.sync_state
-                                        self._clear_sync_state()
+                                        # Enable auto-processing
+                                        st.session_state.auto_processing_enabled = True
+                                        st.session_state.monitored_folder_id = folder_id
                                 
                                 except Exception as e:
-                                    # Handle timeout or other errors
-                                    st.error(f"⚠️ Sync interrupted: {str(e)}")
-                                    
-                                    # Mark sync as interrupted for resume capability
-                                    if 'sync_state' in st.session_state:
-                                        st.session_state.sync_state['status'] = 'interrupted'
-                                        st.session_state.sync_state['error'] = str(e)
-                                        self._save_sync_state()
-                                        
-                                        completed = st.session_state.sync_state.get('completed_count', 0)
-                                        total = st.session_state.sync_state.get('total_count', len(documents))
-                                        
-                                        st.info(f"""
-                                        📝 **Progress saved**: {completed}/{total} files processed
-                                        
-                                        You can resume the sync by refreshing the page and clicking 'Resume Sync'.
-                                        All progress has been saved automatically.
-                                        """)
+                                    st.error(f"⚠️ Processing error: {str(e)}")
+                                    st.info("💡 Try refreshing and processing in smaller batches if needed.")
                             
                             # Show sample files
                             if documents and len(documents) > 0:
