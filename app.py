@@ -669,8 +669,6 @@ def main():
     rag_handler, multi_expert_system, standard_model, expert_model = get_model_components(config, vector_db)
     
     with st.sidebar:
-        st.markdown("### 🏭 Knowledge Assistant")
-        
         # Expert Mode Selection - ALWAYS VISIBLE
         st.markdown("### 🎯 Assistant Mode")
         
@@ -769,63 +767,17 @@ def main():
         
         st.divider()
         
-        # Simplified help section
-        with st.expander("💡 How to Use", expanded=False):
-            st.markdown("""
-            **1. Select Mode Above**
-            Choose General Search or a specific expert
+        # Knowledge Base Status (simplified)
+        try:
+            collection_info = vector_db.get_collection_info()
+            unique_docs = collection_info.get('unique_documents', 0)
             
-            **2. Ask Your Question**
-            Type naturally in the chat below
-            
-            **3. Get Targeted Answers**
-            Responses tailored to your selected mode
-            """)
-        
-        # Usage stats (if helpful)
-        with st.expander("📊 Session Info", expanded=False):
-            # Show basic session stats
-            username = st.session_state.get('username', 'Unknown')
-            login_time = st.session_state.get('login_time')
-            
-            st.markdown(f"**User:** {username}")
-            if login_time:
-                st.markdown(f"**Session:** {login_time.strftime('%H:%M')}")
-            
-            # Document count
-            try:
-                doc_count = vector_db.collection.count() if hasattr(vector_db, 'collection') else 0
-                st.markdown(f"**Knowledge Base:** {doc_count} documents")
-            except:
-                st.markdown("**Knowledge Base:** Connected")
-        
-        st.divider()
-        
-        # Knowledge Base Status (read-only for users)
-        with st.expander("📊 Knowledge Base", expanded=False):
-            try:
-                collection_info = vector_db.get_collection_info()
-                total_chunks = collection_info.get('count', 0)
-                unique_docs = collection_info.get('unique_documents', 0)
-                
-                if unique_docs > 0:
-                    st.metric("📄 Total SOPs", f"{unique_docs:,}")
-                    st.caption(f"📊 {total_chunks:,} searchable chunks")
-                    st.success("✅ Knowledge base is ready")
-                else:
-                    st.metric("📄 Documents", "0")
-                    st.info("💡 Admin can sync documents in Admin Portal")
-            except:
-                st.warning("⚠️ Knowledge base connection issue")
-            
-            # Google Drive connection status (read-only)
-            from cloud_storage import GoogleDriveManager
-            gdrive = GoogleDriveManager()
-            
-            if gdrive.load_saved_credentials():
-                st.caption("🔗 Google Drive: Connected")
+            if unique_docs > 0:
+                st.markdown(f"📄 **{unique_docs:,} SOPs** available")
             else:
-                st.caption("🔗 Google Drive: Not connected")
+                st.markdown("📄 **No documents** - Admin can sync in Admin Portal")
+        except:
+            st.markdown("📄 **Knowledge base** connection issue")
         
         st.divider()
         
