@@ -66,33 +66,7 @@ def handle_unified_chat_input(multi_expert_system):
         key="main_chat_input"
     )
     
-    # If user typed something, process the input
-    if user_input:
-        final_input = user_input
-        
-        # Add pending mentions from button clicks
-        if st.session_state.get("pending_mentions", []):
-            pending_mentions_str = " ".join(st.session_state.pending_mentions)
-            # Only add if not already in the message
-            if not any(mention in user_input for mention in st.session_state.pending_mentions):
-                final_input = f"{pending_mentions_str} {user_input}"
-            # Clear pending mentions after use
-            st.session_state.pending_mentions = []
-        
-        # Also check for checkbox selections
-        selected_experts = []
-        for expert_name in available_experts.keys():
-            if st.session_state.get(f"expert_checkbox_{expert_name}", False):
-                selected_experts.append(expert_name)
-        
-        # Add @mentions from checkboxes if not already mentioned
-        if selected_experts and not any(f"@{expert}" in final_input for expert in selected_experts):
-            expert_mentions = " ".join([f"@{expert}" for expert in selected_experts])
-            final_input = f"{expert_mentions} {final_input}"
-        
-        return final_input
-    
-    return None
+    return user_input
 
 def handle_expert_chat_input_deprecated(multi_expert_system):
     """Handle chat input with expert autocomplete functionality"""
