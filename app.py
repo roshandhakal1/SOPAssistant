@@ -58,15 +58,53 @@ def initialize_components():
     return config, doc_processor, embeddings_manager, vector_db, chat_history_manager
 
 def handle_unified_chat_input(multi_expert_system):
-    """Minimalist Apple-style chat input"""
+    """Enhanced chat input with expert selection dropdown"""
     
-    # Just the chat input - clean and simple
-    user_input = st.chat_input(
-        "Ask a question or @mention an expert",
+    # Get available experts
+    available_experts = multi_expert_system.get_available_experts()
+    
+    # Expert selection above chat input - clean and visible
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        expert_options = ["💬 General Search (All SOPs)"]
+        expert_map = {"💬 General Search (All SOPs)": ""}
+        
+        for expert_name, expert_info in available_experts.items():
+            clean_name = expert_name.replace("Expert", "")
+            display_text = f"🎯 {clean_name} - {expert_info['title']}"
+            expert_options.append(display_text)
+            expert_map[display_text] = f"@{expert_name}"
+        
+        selected_expert = st.selectbox(
+            "Choose consultation type:",
+            expert_options,
+            key="expert_selector",
+            help="Select how you want your question answered"
+        )
+    
+    with col2:
+        # Show selected expert info
+        expert_mention = expert_map.get(selected_expert, "")
+        if expert_mention:
+            st.markdown(f"**Selected:** {expert_mention}")
+        else:
+            st.markdown("**Mode:** General search")
+    
+    # Main chat input
+    user_question = st.chat_input(
+        "Ask your question...",
         key="main_chat_input"
     )
     
-    return user_input
+    # Combine question with expert mention if one is selected
+    if user_question:
+        if expert_mention:
+            return f"{expert_mention} {user_question}"
+        else:
+            return user_question
+    
+    return None
 
 def handle_expert_chat_input_deprecated(multi_expert_system):
     """Handle chat input with expert autocomplete functionality"""
