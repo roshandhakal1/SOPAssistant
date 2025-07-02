@@ -26,7 +26,8 @@ from cloud_storage import CloudStorageUI
 
 st.set_page_config(page_title="SOP Assistant", page_icon="📋", layout="wide")
 
-# Force deployment update - v2024.1
+# Force deployment update - v2025.01.02-GDRIVE-FIX
+# DEPLOYMENT VERSION: Google Drive links + Advanced Market Analyst
 
 # Require authentication before accessing the app
 auth_manager = require_auth()
