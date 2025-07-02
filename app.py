@@ -710,26 +710,9 @@ def main():
                 total_chunks = collection_info.get('count', 0)
                 unique_docs = collection_info.get('unique_documents', 0)
                 
-                # Count Google Drive references
-                gdrive_count = 0
-                try:
-                    results = vector_db.collection.get(include=['metadatas'], limit=10000)
-                    if results and results.get('metadatas'):
-                        gdrive_docs = set()
-                        for metadata in results['metadatas']:
-                            if 'gdrive_id' in metadata:
-                                gdrive_docs.add(metadata['gdrive_id'])
-                        gdrive_count = len(gdrive_docs)
-                except:
-                    pass
-                
-                # Show the higher count (either processed docs or gdrive refs)
-                total_sops = max(unique_docs, gdrive_count)
-                
-                if total_sops > 0:
-                    st.metric("📄 Total SOPs", f"{total_sops}")
-                    if gdrive_count > unique_docs:
-                        st.caption(f"🔗 {gdrive_count} Google Drive refs")
+                if unique_docs > 0:
+                    st.metric("📄 Total SOPs", f"{unique_docs:,}")
+                    st.caption(f"📊 {total_chunks:,} searchable chunks")
                     st.success("✅ Knowledge base is ready")
                 else:
                     st.metric("📄 Documents", "0")
@@ -881,20 +864,8 @@ def main():
             collection_info = vector_db.get_collection_info()
             unique_docs = collection_info.get('unique_documents', 0)
             
-            # Also check for Google Drive references
-            gdrive_count = 0
-            try:
-                results = vector_db.collection.get(include=['metadatas'])
-                if results and results.get('metadatas'):
-                    gdrive_docs = set()
-                    for metadata in results['metadatas']:
-                        if 'gdrive_id' in metadata:
-                            gdrive_docs.add(metadata['gdrive_id'])
-                    gdrive_count = len(gdrive_docs)
-            except:
-                pass
-            
-            total_sops = max(unique_docs, gdrive_count)
+            # The unique_docs count should now be accurate (counting unique filenames)
+            total_sops = unique_docs
             st.markdown(f"""
             <div style="text-align: center; margin: 20px auto; max-width: 300px;">
                 <div style="padding: 12px; background: #f8f9fa; border-radius: 8px;">

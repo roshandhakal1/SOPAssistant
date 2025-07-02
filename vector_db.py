@@ -119,14 +119,17 @@ class VectorDatabase:
                 print(f"Sample metadata keys: {list(metadatas[0].keys())}")
                 print(f"Sample metadata: {metadatas[0]}")
             
-            # Count unique source files using 'source' field (from document_processor.py)
+            # Count unique source files by filename (not full path)
             unique_sources = set()
             for metadata in metadatas:
-                if 'source' in metadata and metadata['source']:
-                    unique_sources.add(metadata['source'])
-                elif 'filename' in metadata and metadata['filename']:
-                    # Fallback to filename if source not available
+                # Prefer filename field which is just the name
+                if 'filename' in metadata and metadata['filename']:
                     unique_sources.add(metadata['filename'])
+                elif 'source' in metadata and metadata['source']:
+                    # Extract filename from full path as fallback
+                    from pathlib import Path
+                    filename = Path(metadata['source']).name
+                    unique_sources.add(filename)
             
             print(f"Unique sources found: {len(unique_sources)}")
             if unique_sources:
