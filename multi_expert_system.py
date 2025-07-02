@@ -144,13 +144,126 @@ class ExpertPersona:
             logger.error(f"Error in market analysis research: {e}")
             return self._generate_fallback_response(query)
     
+    def _generate_professional_response(self, query: str, context: List[str], 
+                                      collaboration_context: str = "", user_info: Dict = None) -> Dict[str, Any]:
+        """Generate professional responses with real references and standards"""
+        
+        try:
+            # Build expert-specific professional prompt
+            professional_prompt = f"""
+            You are {self.name}, a {self.title} with 10/10 expertise in {self.expertise}.
+            
+            PERSONALITY & APPROACH: {self.personality}
+            
+            USER QUERY: {query}
+            CONTEXT: {chr(10).join(context) if context else "No specific context available"}
+            {f"COLLABORATION CONTEXT: {collaboration_context}" if collaboration_context else ""}
+            
+            PROFESSIONAL STANDARDS REQUIRED:
+            
+            1. **CITE REAL STANDARDS & REFERENCES**:
+               - Reference actual industry standards (ISO, ASTM, FDA CFR, OSHA, cGMP, USP, etc.)
+               - Include specific regulation numbers and sections when applicable
+               - Cite real equipment manuals, manufacturer specifications, and technical guides
+               - Reference actual case studies, industry reports, and technical papers
+            
+            2. **PROVIDE SPECIFIC TECHNICAL DATA**:
+               - Include actual operating parameters, specifications, and tolerances
+               - Reference real manufacturer part numbers, model numbers, and technical specs
+               - Provide specific measurement units, ranges, and acceptance criteria
+               - Include actual troubleshooting procedures and diagnostic steps
+            
+            3. **REFERENCE REAL INDUSTRY PRACTICES**:
+               - Cite actual companies and their documented best practices (when publicly available)
+               - Reference real industry associations and their guidelines
+               - Include actual training programs, certifications, and qualifications
+               - Mention real software, tools, and systems used in the industry
+            
+            4. **INCLUDE ACTUAL SOURCES**:
+               - Provide website URLs for standards organizations and regulatory bodies
+               - Reference actual equipment manufacturer websites and technical documentation
+               - Include links to industry associations and professional organizations
+               - Cite real training providers and certification bodies
+            
+            5. **EXPERT-SPECIFIC REQUIREMENTS**:
+            
+            **For Quality/Safety Experts**: 
+               - Cite specific FDA CFR sections, ISO standards, and cGMP requirements
+               - Reference actual audit checklists and compliance documentation
+               - Include real SPC charts, control limits, and statistical methods
+            
+            **For Manufacturing/Process/Maintenance Experts**:
+               - Reference actual equipment manuals and manufacturer specifications
+               - Include real troubleshooting flowcharts and diagnostic procedures
+               - Cite specific maintenance schedules and PM procedures
+               - Reference actual OEE calculations and performance metrics
+            
+            **For Product Development/Formulation Experts**:
+               - Cite real scientific studies and clinical research papers
+               - Reference actual ingredient suppliers and specification sheets
+               - Include real formulation guidelines and stability testing protocols
+               - Mention actual analytical methods and testing procedures
+            
+            **For Accounting Experts**:
+               - Reference actual GAAP standards and accounting principles
+               - Cite real software systems (SAP, Oracle, QuickBooks) and their implementations
+               - Include actual cost accounting methods and variance analysis techniques
+               - Reference real financial ratios and industry benchmarks
+            
+            FORMAT REQUIREMENTS:
+            - Start with direct technical analysis (no greetings)
+            - Include section headers for easy navigation
+            - Provide actionable step-by-step procedures
+            - Include specific references with URLs when possible
+            - End with clear next steps and recommendations
+            
+            AVOID:
+            - Generic advice without specific references
+            - Vague statements like "industry best practices suggest"
+            - Hypothetical examples instead of real case studies
+            - Recommendations without technical backing
+            
+            Deliver expert-level technical guidance with the depth and specificity expected from a seasoned professional with 10+ years of experience.
+            """
+            
+            generation_config = {
+                "max_output_tokens": 8192,
+                "temperature": 0.1,  # Lower temperature for technical accuracy
+                "top_p": 0.95,
+                "top_k": 40
+            }
+            
+            response = self.model.generate_content(professional_prompt, generation_config=generation_config)
+            
+            expert_response = {
+                "expert_name": self.name,
+                "expert_title": self.title,
+                "main_response": response.text,
+                "key_insights": ["Technical analysis with industry standards", "Real specifications and procedures referenced", "Professional-grade recommendations provided"],
+                "recommendations": {"immediate": ["Review referenced standards and procedures", "Implement specific technical recommendations"], 
+                                 "strategic": ["Develop systematic approach based on industry standards", "Establish monitoring and measurement protocols"]},
+                "risks_considerations": ["Ensure compliance with all referenced regulations", "Verify equipment specifications before implementation"],
+                "follow_up_questions": ["Would you like specific implementation guidance?", "Should I provide additional technical references for this topic?"],
+                "confidence_level": "high",
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            return expert_response
+            
+        except Exception as e:
+            logger.error(f"Error generating professional response for {self.name}: {e}")
+            return self._generate_fallback_response(query)
+    
     def generate_response(self, query: str, context: List[str], 
                          collaboration_context: str = "", user_info: Dict = None) -> Dict[str, Any]:
         """Generate a response from this expert's perspective"""
         
-        # Enhanced Market Analysis Expert with web research capabilities
+        # Enhanced experts with specialized research capabilities
         if self.name == "MarketAnalysisExpert":
             return self._generate_market_analysis_response(query, context, collaboration_context, user_info)
+        elif self.name in ["QualityExpert", "ManufacturingExpert", "SafetyExpert", "MaintenanceExpert", 
+                          "ProcessEngineeringExpert", "ProductDevelopmentExpert", "AccountingExpert"]:
+            return self._generate_professional_response(query, context, collaboration_context, user_info)
         
         prompt = self._build_expert_prompt(query, context, collaboration_context, user_info)
         
