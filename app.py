@@ -904,28 +904,38 @@ def main():
     prompt = handle_unified_chat_input(multi_expert_system)
     
     if prompt:
+        # Add user message to history
         st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        # Display user message
         with st.chat_message("user"):
             st.markdown(prompt)
         
+        # Create assistant message container immediately
         with st.chat_message("assistant"):
+            # Create a container for the entire response
+            response_container = st.container()
+            
             # Check if the prompt contains @mentions for expert consultation
             mentioned_experts = multi_expert_system.parse_mentions(prompt)
             
             if mentioned_experts:
                 # Expert consultation with full conversation context
-                # Custom thinking animation
-                thinking_placeholder = st.empty()
-                thinking_placeholder.markdown("""
-                <div style="text-align: center; padding: 20px;">
-                    <div style="font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 1.2rem; color: #666; margin-bottom: 8px;">Consulting experts</div>
-                    <div class="thinking-dots" style="font-size: 1.5rem; color: #666;">
-                        <span>•</span>
-                        <span>•</span>
-                        <span>•</span>
+                with response_container:
+                    # Show thinking animation in the same message bubble
+                    thinking_placeholder = st.empty()
+                    thinking_placeholder.markdown("""
+                    <div style="padding: 10px 0;">
+                        <div style="font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 1rem; color: #666;">
+                            <span style="margin-right: 8px;">Consulting experts</span>
+                            <span class="thinking-dots" style="font-size: 1rem;">
+                                <span>•</span>
+                                <span>•</span>
+                                <span>•</span>
+                            </span>
+                        </div>
                     </div>
-                </div>
-                """, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
                 
                 try:
                     # Get relevant SOPs and context
@@ -951,44 +961,46 @@ def main():
                     # Consult experts with full context
                     consultation_result = multi_expert_system.consult_experts(prompt, full_context)
                     
-                    # Display expert consultation results (using the existing display code)
+                    # Extract results from consultation
                     experts_consulted = consultation_result['experts_consulted']
                     expert_responses = consultation_result['expert_responses']
                     consultation_summary = consultation_result['consultation_summary']
                     
-                    # Header with experts consulted
-                    if len(experts_consulted) == 1:
-                        expert_name = experts_consulted[0]
-                        expert_info = multi_expert_system.experts[expert_name]
-                        st.markdown(f"#### 🎯 {expert_info.title} Analysis")
-                    else:
-                        st.markdown(f"#### 🏭 Multi-Expert Consultation ({len(experts_consulted)} experts)")
-                        st.info(f"**Experts consulted:** {', '.join([multi_expert_system.experts[name].name for name in experts_consulted])}")
-                    
-                    # Display each expert's response (clean professional format)
-                    for expert_name, expert_response in expert_responses.items():
-                        expert_info = multi_expert_system.experts[expert_name]
-                        
-                        if len(expert_responses) > 1:
-                            st.markdown(f"### 👤 {expert_response['expert_title']}")
-                        
-                        # Main response - this now contains the full professional advice
-                        st.markdown(expert_response['main_response'], unsafe_allow_html=True)
-                        
-                        # Follow-up questions if they exist and are contextual
-                        follow_ups = expert_response.get('follow_up_questions', [])
-                        if follow_ups and any(follow_up for follow_up in follow_ups if follow_up and 'aspect of' not in follow_up):
-                            st.markdown("---")
-                            st.markdown("**💡 Follow-up questions:**")
-                            for question in follow_ups[:2]:
-                                if question and 'aspect of' not in question:
-                                    st.markdown(f"• {question}")
-                        
-                        if len(expert_responses) > 1:
-                            st.markdown("---")
-                    
-                    # Clear thinking animation
+                    # Clear thinking animation and display response in same container
                     thinking_placeholder.empty()
+                    
+                    # Display the complete response in the placeholder
+                    with thinking_placeholder.container():
+                        # Header with experts consulted
+                        if len(experts_consulted) == 1:
+                            expert_name = experts_consulted[0]
+                            expert_info = multi_expert_system.experts[expert_name]
+                            st.markdown(f"#### 🎯 {expert_info.title} Analysis")
+                        else:
+                            st.markdown(f"#### 🏭 Multi-Expert Consultation ({len(experts_consulted)} experts)")
+                            st.info(f"**Experts consulted:** {', '.join([multi_expert_system.experts[name].name for name in experts_consulted])}")
+                        
+                        # Display each expert's response (clean professional format)
+                        for expert_name, expert_response in expert_responses.items():
+                            expert_info = multi_expert_system.experts[expert_name]
+                            
+                            if len(expert_responses) > 1:
+                                st.markdown(f"### 👤 {expert_response['expert_title']}")
+                            
+                            # Main response - this now contains the full professional advice
+                            st.markdown(expert_response['main_response'], unsafe_allow_html=True)
+                            
+                            # Follow-up questions if they exist and are contextual
+                            follow_ups = expert_response.get('follow_up_questions', [])
+                            if follow_ups and any(follow_up for follow_up in follow_ups if follow_up and 'aspect of' not in follow_up):
+                                st.markdown("---")
+                                st.markdown("**💡 Follow-up questions:**")
+                                for question in follow_ups[:2]:
+                                    if question and 'aspect of' not in question:
+                                        st.markdown(f"• {question}")
+                            
+                            if len(expert_responses) > 1:
+                                st.markdown("---")
                     
                     # Prepare response for chat history
                     if len(expert_responses) == 1:
@@ -1007,18 +1019,21 @@ def main():
             
             else:
                 # Standard knowledge search (no @mentions) WITH CONVERSATION CONTEXT
-                # Custom thinking animation
-                thinking_placeholder = st.empty()
-                thinking_placeholder.markdown("""
-                <div style="text-align: center; padding: 20px;">
-                    <div style="font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 1.2rem; color: #666; margin-bottom: 8px;">Thinking</div>
-                    <div class="thinking-dots" style="font-size: 1.5rem; color: #666;">
-                        <span>•</span>
-                        <span>•</span>
-                        <span>•</span>
+                with response_container:
+                    # Show thinking animation in the same message bubble
+                    thinking_placeholder = st.empty()
+                    thinking_placeholder.markdown("""
+                    <div style="padding: 10px 0;">
+                        <div style="font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 1rem; color: #666;">
+                            <span style="margin-right: 8px;">Searching knowledge base</span>
+                            <span class="thinking-dots" style="font-size: 1rem;">
+                                <span>•</span>
+                                <span>•</span>
+                                <span>•</span>
+                            </span>
+                        </div>
                     </div>
-                </div>
-                """, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
                 
                 try:
                     # Build conversation context for follow-up questions
@@ -1045,43 +1060,45 @@ Please answer the current question, taking into account the conversation context
                     # Get response from SOP knowledge base with context
                     response, sop_sources = rag_handler.query(enhanced_prompt)
                     
-                    # Clear thinking animation
+                    # Clear thinking animation and display response in same container
                     thinking_placeholder.empty()
                     
-                    st.markdown(response, unsafe_allow_html=True)
-                    
-                    # Show SOP sources with prominent Google Drive links
-                    if sop_sources:
-                        # Check if any sources have Google Drive links
-                        has_gdrive_links = any(isinstance(source, dict) and 'gdrive_link' in source for source in sop_sources)
+                    # Display the complete response in the placeholder
+                    with thinking_placeholder.container():
+                        st.markdown(response, unsafe_allow_html=True)
                         
-                        if has_gdrive_links:
-                            expander_title = f"📎 Reference Documents ({len(sop_sources)}) - Click to open in Google Drive"
-                        else:
-                            expander_title = f"📎 Reference Documents ({len(sop_sources)})"
-                        
-                        with st.expander(expander_title, expanded=False):
-                            for i, source in enumerate(sop_sources[:10]):  # Show max 10
-                                if isinstance(source, dict) and 'gdrive_link' in source:
-                                    # Clean filename display with Google Drive link
-                                    filename = source["filename"].replace(".doc", "").replace(".docx", "").replace(".pdf", "")
-                                    # Use target="_blank" to open in new tab
-                                    gdrive_url = source['gdrive_link']
-                                    st.markdown(f"{i+1}. 📄 <a href='{gdrive_url}' target='_blank'>{filename}</a> 🔗", unsafe_allow_html=True)
-                                elif isinstance(source, dict) and 'filename' in source:
-                                    filename = source["filename"].replace(".doc", "").replace(".docx", "").replace(".pdf", "")
-                                    st.markdown(f"{i+1}. 📄 {filename}")
-                                else:
-                                    filename = str(source).replace(".doc", "").replace(".docx", "").replace(".pdf", "")
-                                    st.markdown(f"{i+1}. 📄 {filename}")
-                            
-                            if len(sop_sources) > 10:
-                                st.caption(f"... and {len(sop_sources) - 10} more documents")
+                        # Show SOP sources with prominent Google Drive links
+                        if sop_sources:
+                            # Check if any sources have Google Drive links
+                            has_gdrive_links = any(isinstance(source, dict) and 'gdrive_link' in source for source in sop_sources)
                             
                             if has_gdrive_links:
-                                st.caption("💡 Click any linked document to open it in Google Drive")
+                                expander_title = f"📎 Reference Documents ({len(sop_sources)}) - Click to open in Google Drive"
                             else:
-                                st.caption("💡 To enable Google Drive links, sync documents in Admin Portal → Integration tab")
+                                expander_title = f"📎 Reference Documents ({len(sop_sources)})"
+                            
+                            with st.expander(expander_title, expanded=False):
+                                for i, source in enumerate(sop_sources[:10]):  # Show max 10
+                                    if isinstance(source, dict) and 'gdrive_link' in source:
+                                        # Clean filename display with Google Drive link
+                                        filename = source["filename"].replace(".doc", "").replace(".docx", "").replace(".pdf", "")
+                                        # Use target="_blank" to open in new tab
+                                        gdrive_url = source['gdrive_link']
+                                        st.markdown(f"{i+1}. 📄 <a href='{gdrive_url}' target='_blank'>{filename}</a> 🔗", unsafe_allow_html=True)
+                                    elif isinstance(source, dict) and 'filename' in source:
+                                        filename = source["filename"].replace(".doc", "").replace(".docx", "").replace(".pdf", "")
+                                        st.markdown(f"{i+1}. 📄 {filename}")
+                                    else:
+                                        filename = str(source).replace(".doc", "").replace(".docx", "").replace(".pdf", "")
+                                        st.markdown(f"{i+1}. 📄 {filename}")
+                                
+                                if len(sop_sources) > 10:
+                                    st.caption(f"... and {len(sop_sources) - 10} more documents")
+                                
+                                if has_gdrive_links:
+                                    st.caption("💡 Click any linked document to open it in Google Drive")
+                                else:
+                                    st.caption("💡 To enable Google Drive links, sync documents in Admin Portal → Integration tab")
                 
                 except Exception as e:
                     thinking_placeholder.empty()
