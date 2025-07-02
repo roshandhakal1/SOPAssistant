@@ -73,7 +73,8 @@ def handle_unified_chat_input(multi_expert_system):
         'safety': '@SafetyExpert',
         'maintenance': '@MaintenanceExpert',
         'product_development': '@ProductDevelopmentExpert',
-        'process_engineering': '@ProcessEngineeringExpert'
+        'process_engineering': '@ProcessEngineeringExpert',
+        'market_analysis': '@MarketAnalysisExpert'
     }
     
     # Show current mode above chat input
@@ -95,6 +96,8 @@ def handle_unified_chat_input(multi_expert_system):
                 expert_names.append('🧪 Formulation')
             elif expert == 'process_engineering':
                 expert_names.append('⚙️ Process')
+            elif expert == 'market_analysis':
+                expert_names.append('📊 Market')
         
         experts_text = ', '.join(expert_names)
         st.markdown(f"""
@@ -116,7 +119,8 @@ def handle_unified_chat_input(multi_expert_system):
             'safety': '🦺 Safety Expert Mode',
             'maintenance': '🔧 Maintenance Expert Mode',
             'product_development': '🧪 Formulation Scientist Mode',
-            'process_engineering': '⚙️ Process Engineer Mode'
+            'process_engineering': '⚙️ Process Engineer Mode',
+            'market_analysis': '📊 Market Analyst Mode'
         }
         
         st.markdown(f"""
@@ -806,6 +810,11 @@ def main():
                 'name': '⚙️ Process Engineer', 
                 'short': 'Process',
                 'desc': 'Industrial machinery, equipment diagnostics, process optimization'
+            },
+            'market_analysis': {
+                'name': '📊 Market Analyst', 
+                'short': 'Market',
+                'desc': 'Competitive intelligence, market research, product analysis'
             }
         }
         

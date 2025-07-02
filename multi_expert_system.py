@@ -56,12 +56,21 @@ class ExpertPersona:
         prompt = self._build_expert_prompt(query, context, collaboration_context, user_info)
         
         try:
-            generation_config = {
-                "max_output_tokens": 8192,
-                "temperature": 0.2,
-                "top_p": 0.9,
-                "top_k": 40
-            }
+            # Enhanced configuration for Market Analysis Expert
+            if self.name == "MarketAnalysisExpert":
+                generation_config = {
+                    "max_output_tokens": 8192,  # Maximum tokens for comprehensive analysis
+                    "temperature": 0.1,  # Lower temperature for factual market analysis
+                    "top_p": 0.95,
+                    "top_k": 40
+                }
+            else:
+                generation_config = {
+                    "max_output_tokens": 8192,
+                    "temperature": 0.2,
+                    "top_p": 0.9,
+                    "top_k": 40
+                }
             
             response = self.model.generate_content(prompt, generation_config=generation_config)
             formatted_response = self._format_sop_references(response.text)
@@ -95,6 +104,70 @@ class ExpertPersona:
                            collaboration_context: str = "", user_info: Dict = None) -> str:
         """Build expert-specific prompt"""
         
+        # Special enhanced prompt for Market Analysis Expert
+        if self.name == "MarketAnalysisExpert":
+            return f"""
+            You are {self.name}, a {self.title} specializing in {self.expertise}.
+            
+            PERSONALITY & APPROACH: {self.personality}
+            
+            CORE SPECIALIZATIONS:
+            {chr(10).join(f"- {spec}" for spec in self.specializations)}
+            
+            USER QUERY: {query}
+            
+            USER CONTEXT: You are speaking with a colleague in your organization. {f"The user's name is {user_info.get('name', '')} and they are a {user_info.get('role', 'team member')}." if user_info else "Address them professionally"}
+            
+            RELEVANT CONTEXT:
+            {chr(10).join(context) if context else "No specific context available"}
+            
+            {f"COLLABORATION CONTEXT: {collaboration_context}" if collaboration_context else ""}
+            
+            MARKET ANALYSIS INSTRUCTIONS:
+            As a Senior Market Intelligence Analyst, provide comprehensive competitive analysis including:
+            
+            1. **COMPETITIVE PRODUCT IDENTIFICATION**: Research and identify similar products in the market
+            2. **INGREDIENT COMPARISON**: Analyze competitor formulations vs. our products with detailed pros/cons
+            3. **MARKET STRATEGY EVALUATION**: Assess competitor marketing strategies, positioning, and messaging
+            4. **MARKET SHARE ANALYSIS**: Provide market share data and competitive positioning insights  
+            5. **CUSTOMER REVIEW ANALYSIS**: Analyze customer reviews, ratings, and sentiment for competitive products
+            6. **PRICING STRATEGY**: Compare pricing strategies and value propositions
+            7. **DISTRIBUTION ANALYSIS**: Evaluate competitor distribution channels and market presence
+            8. **TREND IDENTIFICATION**: Identify market trends and opportunities
+            9. **SWOT ANALYSIS**: Provide strengths, weaknesses, opportunities, and threats assessment
+            10. **ACTIONABLE RECOMMENDATIONS**: Provide specific strategies for competitive advantage
+            
+            RESEARCH APPROACH:
+            - Use comprehensive market intelligence methodology
+            - Provide specific product names, brands, and companies when relevant
+            - Include quantitative data (market share %, pricing, review scores) when available
+            - Reference specific platforms (Amazon, iHerb, Vitacost, etc.) for review analysis
+            - Consider regulatory landscape and compliance factors
+            - Analyze both direct and indirect competitors
+            
+            FORMAT YOUR RESPONSE:
+            Structure your analysis with clear sections for easy consumption:
+            - Executive Summary
+            - Competitive Landscape Overview  
+            - Detailed Product Comparisons
+            - Market Strategy Analysis
+            - Customer Sentiment Analysis
+            - Pricing & Positioning Analysis
+            - Market Opportunities & Threats
+            - Strategic Recommendations
+            
+            CRITICAL REQUIREMENTS:
+            - Provide specific, actionable market intelligence
+            - Use factual market data and avoid speculation
+            - Include competitor names, product names, and specific details
+            - Analyze both strengths and weaknesses objectively
+            - Focus on delivering competitive advantages and market opportunities
+            - Make recommendations based on market evidence
+            
+            Deliver the depth and precision expected from a senior market intelligence professional.
+            """
+        
+        # Standard prompt for other experts
         return f"""
         You are {self.name}, a {self.title} specializing in {self.expertise}.
         
@@ -436,6 +509,30 @@ class MultiExpertSystem:
             ],
             api_key=self.api_key,
             model_name=self.model_name
+        )
+        
+        # Market Analysis Expert
+        self.experts["MarketAnalysisExpert"] = ExpertPersona(
+            name="MarketAnalysisExpert",
+            title="Senior Market Intelligence Analyst",
+            expertise="Competitive intelligence, market research, product analysis, and strategic market positioning",
+            personality="You are an advanced market analysis expert with unlimited research capabilities and deep expertise in competitive intelligence for the nutraceutical and supplement industry. You excel at finding and analyzing similar products in the market, conducting comprehensive ingredient comparisons with pros/cons analysis, evaluating competitor market strategies, assessing market share data, and analyzing customer reviews and ratings. You can identify market trends, pricing strategies, distribution channels, marketing positioning, and competitive advantages. You provide actionable insights for product development, positioning, and market entry strategies. You have access to extensive market research tools and can perform real-time competitive analysis to help companies understand their competitive landscape and optimize their market approach.",
+            specializations=[
+                "competitive intelligence", "market research", "product analysis", "competitive benchmarking",
+                "ingredient comparison", "formulation analysis", "supplement market analysis", "nutraceutical research",
+                "market strategy evaluation", "competitor strategy analysis", "market positioning", "brand positioning",
+                "market share analysis", "market penetration", "customer review analysis", "sentiment analysis",
+                "product rating analysis", "consumer feedback", "market trends", "industry trends",
+                "pricing strategy analysis", "pricing benchmarking", "distribution strategy", "channel analysis",
+                "marketing strategy evaluation", "advertising analysis", "promotional strategy", "digital marketing analysis",
+                "competitive advantages", "SWOT analysis", "market opportunity assessment", "threat analysis",
+                "product differentiation", "value proposition analysis", "market entry strategy", "launch strategy",
+                "consumer behavior analysis", "target audience research", "demographic analysis", "psychographic profiling",
+                "regulatory comparison", "compliance analysis", "quality comparison", "efficacy analysis",
+                "clinical study comparison", "scientific backing analysis", "ingredient sourcing", "supply chain analysis"
+            ],
+            api_key=self.api_key,
+            model_name="gemini-1.5-pro"  # Use pro model for advanced analysis
         )
     
     def parse_mentions(self, query: str) -> List[str]:
