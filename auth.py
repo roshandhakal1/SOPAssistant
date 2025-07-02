@@ -209,7 +209,7 @@ class AuthManager:
         return False
     
     def _save_persistent_session(self, user_data: Dict) -> None:
-        """Save session data to secure browser-only storage."""
+        """Save session data for persistent login."""
         try:
             session_data = {
                 "username": user_data["username"],
@@ -222,50 +222,60 @@ class AuthManager:
                 "session_id": hashlib.sha256(f"{user_data['username']}{datetime.now().isoformat()}".encode()).hexdigest()
             }
             
-            # SECURITY FIX: Only use Streamlit session state (browser-only, session-specific)
-            # This ensures sessions don't persist across different devices/browsers
-            st.session_state._persistent_session = session_data
-            
-            # DO NOT save to environment variables or files - major security risk
+            # Save to a secure session file
+            import json
+            session_filename = f".session_{hashlib.sha256(user_data['username'].encode()).hexdigest()}.json"
+            with open(session_filename, 'w') as f:
+                json.dump(session_data, f)
                 
         except Exception:
             pass  # Fail silently if can't save
     
     def _load_persistent_session(self) -> bool:
-        """Load session data from secure browser-only storage."""
+        """Load session data from persistent storage."""
         try:
-            session_data = None
+            import json
+            import glob
             
-            # SECURITY FIX: Only check Streamlit session state (browser-only)
-            # Do NOT check environment variables or files - prevents cross-device login
-            if hasattr(st.session_state, '_persistent_session'):
-                session_data = st.session_state._persistent_session
+            # Look for any session files
+            session_files = glob.glob(".session_*.json")
             
-            if session_data:
-                # Check if session is still valid
-                expires = datetime.fromisoformat(session_data['expires'])
-                if datetime.now() < expires:
-                    # Clear any existing session data first
-                    self._clear_session_data()
+            for session_file in session_files:
+                try:
+                    with open(session_file, 'r') as f:
+                        session_data = json.load(f)
                     
-                    # Restore session state
-                    st.session_state.authenticated = True
-                    st.session_state.username = session_data["username"]
-                    st.session_state.user_role = session_data["user_role"]
-                    st.session_state.user_name = session_data["user_name"]
-                    st.session_state.user_email = session_data["user_email"]
-                    st.session_state.login_time = datetime.fromisoformat(session_data["login_time"])
-                    st.session_state.remember_me = True
-                    
-                    # Initialize clean session state for this user
-                    st.session_state.messages = []
-                    st.session_state.mode = "standard"
-                    st.session_state.uploaded_documents = []
-                    
-                    return True
-                else:
-                    # Expired, clear it
-                    self._clear_persistent_session()
+                    # Check if session is still valid
+                    expires = datetime.fromisoformat(session_data['expires'])
+                    if datetime.now() < expires:
+                        # Clear any existing session data first
+                        self._clear_session_data()
+                        
+                        # Restore session state
+                        st.session_state.authenticated = True
+                        st.session_state.username = session_data["username"]
+                        st.session_state.user_role = session_data["user_role"]
+                        st.session_state.user_name = session_data["user_name"]
+                        st.session_state.user_email = session_data["user_email"]
+                        st.session_state.login_time = datetime.fromisoformat(session_data["login_time"])
+                        st.session_state.remember_me = True
+                        
+                        # Initialize clean session state for this user
+                        st.session_state.messages = []
+                        st.session_state.mode = "standard"
+                        st.session_state.uploaded_documents = []
+                        
+                        return True
+                    else:
+                        # Expired, remove it
+                        os.remove(session_file)
+                        
+                except Exception:
+                    # If we can't read the file, remove it
+                    try:
+                        os.remove(session_file)
+                    except:
+                        pass
             
         except Exception:
             pass
@@ -275,34 +285,45 @@ class AuthManager:
     def _clear_persistent_session(self) -> None:
         """Clear persistent session storage."""
         try:
-            # SECURITY FIX: Only clear Streamlit session state
-            if hasattr(st.session_state, '_persistent_session'):
-                del st.session_state._persistent_session
+            import glob
             
-            # Clean up any legacy insecure storage that might exist
-            # Clear environment variable if it exists (cleanup legacy)
-            if 'USER_SESSION' in os.environ:
-                del os.environ['USER_SESSION']
+            # Remove all session files
+            session_files = glob.glob(".session_*.json")
+            for session_file in session_files:
+                try:
+                    os.remove(session_file)
+                except:
+                    pass
             
-            # Clear file if it exists (cleanup legacy)
-            try:
-                if os.path.exists('.user_session.json'):
-                    os.remove('.user_session.json')
-            except Exception:
-                pass
         except Exception:
             pass
     
     def render_user_info(self) -> None:
         """Render user info in main header area."""
         if self.is_session_valid():
+            # Get time-based greeting
+            from datetime import datetime
+            import pytz
+            
+            # Get PST time
+            pst = pytz.timezone('US/Pacific')
+            current_time = datetime.now(pst)
+            hour = current_time.hour
+            
+            if 5 <= hour < 12:
+                greeting = "Good morning"
+            elif 12 <= hour < 17:
+                greeting = "Good afternoon"
+            else:
+                greeting = "Good evening"
+            
             # Add user info and sign out to the top right of main area
             col1, col2, col3 = st.columns([4, 1.5, 0.5])
             
             with col2:
                 st.markdown(f"""
                 <div style="text-align: right; padding: 0.5rem 0; color: #6e6e73; font-size: 0.875rem;">
-                    👤 {st.session_state.user_name} <span style="color: #86868b;">({st.session_state.user_role})</span>
+                    {greeting}, {st.session_state.user_name} <span style="color: #86868b;">({st.session_state.user_role})</span>
                 </div>
                 """, unsafe_allow_html=True)
             

@@ -24,7 +24,7 @@ from auth import require_auth
 from chat_history_manager import ChatHistoryManager
 from cloud_storage import CloudStorageUI
 
-st.set_page_config(page_title="Manufacturing Knowledge Assistant", page_icon="🏭", layout="wide")
+st.set_page_config(page_title="SOP Assistant", page_icon="📋", layout="wide")
 
 # Force deployment update - v2024.1
 
@@ -58,49 +58,52 @@ def initialize_components():
     return config, doc_processor, embeddings_manager, vector_db, chat_history_manager
 
 def handle_unified_chat_input(multi_expert_system):
-    """Enhanced chat input with expert selection dropdown"""
+    """Apple-inspired minimal chat interface"""
     
     # Get available experts
     available_experts = multi_expert_system.get_available_experts()
     
-    # Expert selection above chat input - clean and visible
-    col1, col2 = st.columns([2, 1])
+    # Mode selector above chat input (not in columns)
+    expert_options = ["💬 General Search"]
+    expert_values = [""]
+    
+    for expert_name, expert_info in available_experts.items():
+        clean_name = expert_name.replace("Expert", "")
+        expert_options.append(f"🎯 {clean_name}")
+        expert_values.append(f"@{expert_name}")
+    
+    # Compact expert selector right above chat input
+    col1, col2, col3 = st.columns([1, 2, 1])
     
     with col1:
-        expert_options = ["💬 General Search (All SOPs)"]
-        expert_map = {"💬 General Search (All SOPs)": ""}
+        # Shorten the expert options to max 20 characters
+        short_expert_options = []
+        for opt in expert_options:
+            if len(opt) > 20:
+                short_expert_options.append(opt[:17] + "...")
+            else:
+                short_expert_options.append(opt)
         
-        for expert_name, expert_info in available_experts.items():
-            clean_name = expert_name.replace("Expert", "")
-            display_text = f"🎯 {clean_name} - {expert_info['title']}"
-            expert_options.append(display_text)
-            expert_map[display_text] = f"@{expert_name}"
-        
-        selected_expert = st.selectbox(
-            "Choose consultation type:",
-            expert_options,
-            key="expert_selector",
-            help="Select how you want your question answered"
+        selected_index = st.selectbox(
+            "",
+            range(len(short_expert_options)),
+            format_func=lambda x: short_expert_options[x],
+            key="expert_mode_selector",
+            label_visibility="collapsed"
         )
+        
+        selected_expert = expert_values[selected_index]
     
-    with col2:
-        # Show selected expert info
-        expert_mention = expert_map.get(selected_expert, "")
-        if expert_mention:
-            st.markdown(f"**Selected:** {expert_mention}")
-        else:
-            st.markdown("**Mode:** General search")
-    
-    # Main chat input
+    # Chat input (outside columns as required by Streamlit)
     user_question = st.chat_input(
         "Ask your question...",
         key="main_chat_input"
     )
     
-    # Combine question with expert mention if one is selected
+    # Process the input
     if user_question:
-        if expert_mention:
-            return f"{expert_mention} {user_question}"
+        if selected_expert:
+            return f"{selected_expert} {user_question}"
         else:
             return user_question
     
@@ -258,8 +261,16 @@ def get_model_components(config, vector_db):
     return rag_handler, multi_expert_system, standard_model, expert_model
 
 def get_file_hash(file_path):
-    with open(file_path, 'rb') as f:
-        return hashlib.md5(f.read()).hexdigest()
+    """Get file hash based on modification time and size for better stability"""
+    try:
+        stat = os.stat(file_path)
+        # Use modification time and file size instead of content hash for stability
+        hash_content = f"{stat.st_mtime}_{stat.st_size}".encode()
+        return hashlib.md5(hash_content).hexdigest()
+    except Exception:
+        # Fallback to content hash if stat fails
+        with open(file_path, 'rb') as f:
+            return hashlib.md5(f.read()).hexdigest()
 
 def load_file_index():
     index_path = "file_index.json"
@@ -594,13 +605,6 @@ def main():
     </style>
     """, unsafe_allow_html=True)
     
-    # Minimalist header - Apple style
-    st.markdown("""
-    <div class="main-header">
-        <div class="main-title">Manufacturing Knowledge Assistant</div>
-        <div class="subtitle">Ask questions. Get answers. Work smarter.</div>
-    </div>
-    """, unsafe_allow_html=True)
     
     
     # Initialize session state for mode
@@ -622,7 +626,7 @@ def main():
         # Get model-specific components
         rag_handler, expert_consultant, standard_model, expert_model = get_model_components(config, vector_db)
         
-        # Auto-processing check for new files (if enabled)
+        # Auto-processing check for new files (disabled by default to prevent constant reprocessing)
         if st.session_state.get('auto_processing_enabled', False):
             try:
                 with st.spinner("🔄 Checking for new files..."):
@@ -801,33 +805,111 @@ def main():
     if "messages" not in st.session_state:
         st.session_state.messages = []
     
-    # Apple-style clean welcome when no messages
+    # Clean welcome
     if not st.session_state.messages:
-        st.markdown("## Welcome to your Knowledge Assistant")
-        st.markdown("")
+        st.markdown("""
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@300;400;500;600;700;800&display=swap');
         
+        .thinking-dots {
+            display: inline-block;
+        }
+        
+        .thinking-dots span {
+            display: inline-block;
+            opacity: 0.3;
+            animation: thinking-pulse 1.4s ease-in-out infinite;
+        }
+        
+        .thinking-dots span:nth-child(1) { animation-delay: 0s; }
+        .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+        
+        @keyframes thinking-pulse {
+            0%, 80%, 100% { opacity: 0.3; }
+            40% { opacity: 1; }
+        }
+        
+        .main-title {
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 4rem;
+            font-weight: 800;
+            margin: 0 0 0.5rem 0;
+            letter-spacing: -0.05em;
+            color: #1d1d1f !important;
+            line-height: 0.9;
+        }
+        
+        .main-subtitle {
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-size: 1.3rem;
+            font-weight: 500;
+            margin: 0.5rem 0 2rem 0;
+            color: #86868b !important;
+        }
+        </style>
+        
+        <div style="text-align: center; padding: 60px 0 40px 0;">
+            <h1 style="font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 4rem; font-weight: 800; margin: 0 0 0.5rem 0; letter-spacing: -0.05em; color: #424242; line-height: 0.9;">SOP Assistant</h1>
+            <p style="font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 1.3rem; font-weight: 500; margin: 0.5rem 0 2rem 0; color: #86868b;">Your intelligent knowledge companion</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Simple feature grid
         col1, col2 = st.columns(2)
+        
         with col1:
             st.markdown("""
-            **🔍 Search SOPs**  
-            Just ask your question naturally
-            
-            **💬 Expert Consultation**  
-            Type @ to mention an expert
-            """)
+            <div style="text-align: center; padding: 20px;">
+                <div style="font-size: 2rem; margin-bottom: 12px;">📚</div>
+                <h4 style="font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif; margin: 0 0 8px 0; font-size: 1.1rem; font-weight: 600; color: #424242;">Smart Search</h4>
+                <p style="font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; font-size: 0.9rem; color: #86868b;">Ask questions naturally</p>
+            </div>
+            """, unsafe_allow_html=True)
         
         with col2:
             st.markdown("""
-            **📊 1,506 SOPs Available**  
-            Comprehensive coverage
-            
-            **⚡ Fast & Accurate**  
-            Enhanced search system
-            """)
+            <div style="text-align: center; padding: 20px;">
+                <div style="font-size: 2rem; margin-bottom: 12px;">👤</div>
+                <h4 style="font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif; margin: 0 0 8px 0; font-size: 1.1rem; font-weight: 600; color: #424242;">Expert Consultation</h4>
+                <p style="font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; font-size: 0.9rem; color: #86868b;">Specialized guidance</p>
+            </div>
+            """, unsafe_allow_html=True)
         
-        st.markdown("")
-        st.markdown("---")
-        st.markdown("")
+        # Dynamic SOP count
+        try:
+            collection_info = vector_db.get_collection_info()
+            unique_docs = collection_info.get('unique_documents', 0)
+            
+            # Also check for Google Drive references
+            gdrive_count = 0
+            try:
+                results = vector_db.collection.get(include=['metadatas'])
+                if results and results.get('metadatas'):
+                    gdrive_docs = set()
+                    for metadata in results['metadatas']:
+                        if 'gdrive_id' in metadata:
+                            gdrive_docs.add(metadata['gdrive_id'])
+                    gdrive_count = len(gdrive_docs)
+            except:
+                pass
+            
+            total_sops = max(unique_docs, gdrive_count)
+            st.markdown(f"""
+            <div style="text-align: center; margin: 20px auto; max-width: 300px;">
+                <div style="padding: 12px; background: #f8f9fa; border-radius: 8px;">
+                    <span style="font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 0.85rem; color: #495057;">📊 <strong>{total_sops:,} SOPs</strong> available for search</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        except:
+            st.markdown("""
+            <div style="text-align: center; margin: 20px auto; max-width: 300px;">
+                <div style="padding: 12px; background: #f8f9fa; border-radius: 8px;">
+                    <span style="font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 0.85rem; color: #495057;">📊 <strong>SOP Database</strong> ready for search</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
     
     # Display chat history
     for message in st.session_state.messages:
@@ -840,6 +922,12 @@ def main():
                 st.markdown(content)
     
     # Clean interface - all document management moved to Admin Portal
+    
+    # Fixed position chat interface at bottom
+    st.markdown("""
+    <div style="border-top: 1px solid #e0e0e0; padding-top: 1rem; margin-top: 2rem; background: rgba(248, 249, 250, 0.5); margin-left: -1rem; margin-right: -1rem; padding-left: 1rem; padding-right: 1rem; padding-bottom: 1rem;">
+    </div>
+    """, unsafe_allow_html=True)
     
     # Unified chat input with smart @mention detection
     prompt = handle_unified_chat_input(multi_expert_system)
@@ -855,7 +943,20 @@ def main():
             
             if mentioned_experts:
                 # Expert consultation with full conversation context
-                with st.spinner("🏭 Consulting experts..."):
+                # Custom thinking animation
+                thinking_placeholder = st.empty()
+                thinking_placeholder.markdown("""
+                <div style="text-align: center; padding: 20px;">
+                    <div style="font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 1.2rem; color: #666; margin-bottom: 8px;">Consulting experts</div>
+                    <div class="thinking-dots" style="font-size: 1.5rem; color: #666;">
+                        <span>•</span>
+                        <span>•</span>
+                        <span>•</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                try:
                     # Get relevant SOPs and context
                     query_embedding = rag_handler.embeddings_manager.create_query_embedding(prompt)
                     sop_documents, sop_metadatas = vector_db.search(query_embedding, top_k=5)
@@ -916,6 +1017,9 @@ def main():
                         if len(expert_responses) > 1:
                             st.markdown("---")
                     
+                    # Clear thinking animation
+                    thinking_placeholder.empty()
+                    
                     # Prepare response for chat history
                     if len(expert_responses) == 1:
                         response = list(expert_responses.values())[0]['main_response']
@@ -925,32 +1029,94 @@ def main():
                         for expert_name, expert_resp in expert_responses.items():
                             expert_title = expert_resp['expert_title']
                             response += f"**{expert_title}:** {expert_resp['main_response'][:200]}...\n\n"
+                
+                except Exception as e:
+                    thinking_placeholder.empty()
+                    st.error(f"Error during expert consultation: {str(e)}")
+                    return
             
             else:
-                # Standard knowledge search (no @mentions)
-                with st.spinner("Searching knowledge base..."):
-                    # Get response from SOP knowledge base
-                    response, sop_sources = rag_handler.query(prompt)
+                # Standard knowledge search (no @mentions) WITH CONVERSATION CONTEXT
+                # Custom thinking animation
+                thinking_placeholder = st.empty()
+                thinking_placeholder.markdown("""
+                <div style="text-align: center; padding: 20px;">
+                    <div style="font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 1.2rem; color: #666; margin-bottom: 8px;">Thinking</div>
+                    <div class="thinking-dots" style="font-size: 1.5rem; color: #666;">
+                        <span>•</span>
+                        <span>•</span>
+                        <span>•</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                try:
+                    # Build conversation context for follow-up questions
+                    conversation_context = ""
+                    if len(st.session_state.messages) > 1:  # If there's previous conversation
+                        # Get last 4 exchanges for context (8 messages total)
+                        recent_messages = st.session_state.messages[-8:]
+                        context_parts = []
+                        for msg in recent_messages:
+                            context_parts.append(f"{msg['role'].title()}: {msg['content'][:200]}")
+                        conversation_context = "\n".join(context_parts)
+                    
+                    # Create enhanced prompt with conversation context
+                    if conversation_context:
+                        enhanced_prompt = f"""Previous conversation context:
+{conversation_context}
+
+Current question: {prompt}
+
+Please answer the current question, taking into account the conversation context above. If this is a follow-up question, make sure to reference previous topics discussed."""
+                    else:
+                        enhanced_prompt = prompt
+                    
+                    # Get response from SOP knowledge base with context
+                    response, sop_sources = rag_handler.query(enhanced_prompt)
+                    
+                    # Clear thinking animation
+                    thinking_placeholder.empty()
                     
                     st.markdown(response, unsafe_allow_html=True)
                     
-                    # Show SOP sources in a clean, collapsed format
+                    # Show SOP sources with prominent Google Drive links
                     if sop_sources:
-                        with st.expander(f"📎 Reference Documents ({len(sop_sources)})", expanded=False):
+                        # Check if any sources have Google Drive links
+                        has_gdrive_links = any(isinstance(source, dict) and 'gdrive_link' in source for source in sop_sources)
+                        
+                        if has_gdrive_links:
+                            expander_title = f"📎 Reference Documents ({len(sop_sources)}) - Click to open in Google Drive"
+                        else:
+                            expander_title = f"📎 Reference Documents ({len(sop_sources)})"
+                        
+                        with st.expander(expander_title, expanded=False):
                             for i, source in enumerate(sop_sources[:10]):  # Show max 10
                                 if isinstance(source, dict) and 'gdrive_link' in source:
-                                    # Clean filename display
-                                    filename = source["filename"].replace(".doc", "").replace(".docx", "")
-                                    st.markdown(f"{i+1}. [{filename}]({source['gdrive_link']})")
-                                elif isinstance(source, dict):
-                                    filename = source["filename"].replace(".doc", "").replace(".docx", "")
-                                    st.markdown(f"{i+1}. {filename}")
+                                    # Clean filename display with Google Drive link
+                                    filename = source["filename"].replace(".doc", "").replace(".docx", "").replace(".pdf", "")
+                                    # Use target="_blank" to open in new tab
+                                    gdrive_url = source['gdrive_link']
+                                    st.markdown(f"{i+1}. 📄 <a href='{gdrive_url}' target='_blank'>{filename}</a> 🔗", unsafe_allow_html=True)
+                                elif isinstance(source, dict) and 'filename' in source:
+                                    filename = source["filename"].replace(".doc", "").replace(".docx", "").replace(".pdf", "")
+                                    st.markdown(f"{i+1}. 📄 {filename}")
                                 else:
-                                    filename = str(source).replace(".doc", "").replace(".docx", "")
-                                    st.markdown(f"{i+1}. {filename}")
+                                    filename = str(source).replace(".doc", "").replace(".docx", "").replace(".pdf", "")
+                                    st.markdown(f"{i+1}. 📄 {filename}")
                             
                             if len(sop_sources) > 10:
                                 st.caption(f"... and {len(sop_sources) - 10} more documents")
+                            
+                            if has_gdrive_links:
+                                st.caption("💡 Click any linked document to open it in Google Drive")
+                            else:
+                                st.caption("💡 To enable Google Drive links, sync documents in Admin Portal → Integration tab")
+                
+                except Exception as e:
+                    thinking_placeholder.empty()
+                    st.error(f"Error during search: {str(e)}")
+                    return
         
         st.session_state.messages.append({"role": "assistant", "content": response})
     

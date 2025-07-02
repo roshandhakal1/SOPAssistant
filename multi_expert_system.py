@@ -94,8 +94,25 @@ class ExpertPersona:
     def _build_expert_prompt(self, query: str, context: List[str], 
                            collaboration_context: str = "") -> str:
         """Build expert-specific prompt"""
+        
+        # Get current time for appropriate greeting
+        import pytz
+        
+        pst = pytz.timezone('US/Pacific')
+        current_time = datetime.now(pst)
+        hour = current_time.hour
+        
+        if 5 <= hour < 12:
+            time_greeting = "Good morning"
+        elif 12 <= hour < 17:
+            time_greeting = "Good afternoon"
+        else:
+            time_greeting = "Good evening"
+        
         return f"""
         You are {self.name}, a {self.title} specializing in {self.expertise}.
+        
+        Current time: {time_greeting} (use this for any greetings if appropriate, but don't always start with greetings unless natural)
         
         PERSONALITY & APPROACH: {self.personality}
         
@@ -286,6 +303,25 @@ class MultiExpertSystem:
                 "occupational health", "safety protocols", "accident prevention",
                 "safety training", "OSHA compliance", "environmental regulations",
                 "emergency response", "safety audits"
+            ],
+            api_key=self.api_key,
+            model_name=self.model_name
+        )
+        
+        # Accounting Expert
+        self.experts["AccountingExpert"] = ExpertPersona(
+            name="AccountingExpert",
+            title="Chief Financial Officer",
+            expertise="Financial management, cost accounting, general accounting, AP/AR, and financial controls",
+            personality="Detail-oriented, analytical, and financially strategic. Focuses on accuracy, compliance, cost optimization, and financial insights to drive business decisions.",
+            specializations=[
+                "cost accounting", "general accounting", "accounts payable", "accounts receivable",
+                "financial reporting", "budgeting", "forecasting", "cash flow management",
+                "financial analysis", "internal controls", "GAAP compliance", "tax accounting",
+                "month-end closing", "year-end closing", "inventory accounting", "fixed assets",
+                "payroll", "financial audits", "variance analysis", "profitability analysis",
+                "invoice processing", "vendor management", "payment processing", "collections",
+                "financial statements", "journal entries", "reconciliations", "expense management"
             ],
             api_key=self.api_key,
             model_name=self.model_name
