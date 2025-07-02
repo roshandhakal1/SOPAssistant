@@ -1146,7 +1146,7 @@ def main():
                         response = f"**Multi-Expert Consultation:** {', '.join(expert_names)}\n\n"
                         for expert_name, expert_resp in expert_responses.items():
                             expert_title = expert_resp['expert_title']
-                            response += f"**{expert_title}:** {expert_resp['main_response'][:200]}...\n\n"
+                            response += f"**{expert_title}:**\n\n{expert_resp['main_response']}\n\n---\n\n"
                 
                 except Exception as e:
                     thinking_placeholder.empty()
