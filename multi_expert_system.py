@@ -112,8 +112,6 @@ class ExpertPersona:
         return f"""
         You are {self.name}, a {self.title} specializing in {self.expertise}.
         
-        Current time: {time_greeting} (use this for any greetings if appropriate, but don't always start with greetings unless natural)
-        
         PERSONALITY & APPROACH: {self.personality}
         
         CORE SPECIALIZATIONS:
@@ -126,17 +124,28 @@ class ExpertPersona:
         
         {f"COLLABORATION CONTEXT: {collaboration_context}" if collaboration_context else ""}
         
-        Respond as {self.name} with your unique expertise and perspective. Be specific, actionable, and reference relevant SOPs when applicable.
+        Provide PROFESSIONAL, INDUSTRY-SPECIFIC ADVICE as a seasoned expert. Your response should:
         
-        Structure your response with:
-        1. **Expert Analysis**: Your professional assessment
-        2. **Key Insights**: Critical points from your specialization
-        3. **Specific Recommendations**: Actionable steps within your expertise
-        4. **Risk Considerations**: Potential issues from your perspective
-        5. **Next Steps**: What should be done next
+        1. Start directly with expert analysis - NO GREETINGS unless the user greets you first
+        2. Reference specific industry practices and real examples from major nutraceutical companies when relevant
+        3. Include specific metrics, standards, or benchmarks used in the industry
+        4. Cite industry best practices or regulatory requirements when applicable
+        5. Provide actionable, specific recommendations - not generic advice
+        6. Reference relevant SOPs from the context when they support your points
         
-        Maintain your professional personality while being practical and solution-focused.
-        Use specific examples from nutraceutical and bar manufacturing when relevant.
+        Format your response naturally as a professional consultation, NOT as a rigid template.
+        
+        Examples of professional tone:
+        - "Based on industry standards, your fill weight variance should remain within ±2% to meet USP requirements..."
+        - "Companies like Nature's Bounty and NOW Foods typically implement a three-stage verification process..."
+        - "FDA guidance CFR 21 Part 111 requires documentation of..."
+        - "In my experience with similar production volumes, implementing a statistical process control system reduced defects by 35%..."
+        
+        DO NOT include formulaic sections like "Immediate/Short-term/Long-term" recommendations.
+        DO NOT start with time-based greetings.
+        DO NOT use generic placeholder text.
+        
+        Write as if you're a highly experienced professional giving specific, valuable advice to a colleague.
         """
     
     def _format_sop_references(self, text: str) -> str:
@@ -153,29 +162,42 @@ class ExpertPersona:
         return text
     
     def _extract_insights(self, text: str) -> List[str]:
-        """Extract key insights from response"""
-        # Simple extraction - can be enhanced with NLP
-        return ["Key insight based on expertise", "Important consideration"]
+        """Extract key insights from response - return empty for now"""
+        return []
     
     def _extract_recommendations(self, text: str) -> Dict[str, List[str]]:
-        """Extract recommendations"""
-        return {
-            "immediate": ["Immediate action item 1", "Immediate action item 2"],
-            "short_term": ["Short-term strategy 1", "Short-term strategy 2"],
-            "long_term": ["Long-term consideration 1", "Long-term consideration 2"]
-        }
+        """Extract recommendations - return empty for now"""
+        return {}
     
     def _extract_risks(self, text: str) -> List[str]:
-        """Extract risk considerations"""
-        return ["Risk consideration 1", "Risk consideration 2"]
+        """Extract risk considerations - return empty for now"""
+        return []
     
     def _generate_follow_ups(self, query: str, response: str) -> List[str]:
-        """Generate follow-up questions"""
-        return [
-            f"Would you like me to elaborate on any aspect of {self.specializations[0]}?",
-            f"Should we discuss implementation details?",
-            f"Do you need help with specific procedures?"
-        ]
+        """Generate contextual follow-up questions"""
+        # Generate actually relevant follow-ups based on the topic
+        follow_ups = []
+        
+        # Quality-related follow-ups
+        if any(term in query.lower() for term in ['quality', 'defect', 'compliance', 'fda']):
+            follow_ups.append("Do you need help setting up specific quality metrics or control charts?")
+            follow_ups.append("Would you like guidance on FDA audit preparation?")
+        
+        # Manufacturing-related follow-ups
+        elif any(term in query.lower() for term in ['production', 'equipment', 'efficiency', 'capacity']):
+            follow_ups.append("Should we analyze your current OEE (Overall Equipment Effectiveness)?")
+            follow_ups.append("Do you need help with capacity planning calculations?")
+        
+        # Financial-related follow-ups
+        elif any(term in query.lower() for term in ['cost', 'budget', 'financial', 'accounting']):
+            follow_ups.append("Would you like to see industry benchmarks for your cost categories?")
+            follow_ups.append("Should we develop a cost reduction roadmap?")
+        
+        # Default contextual follow-up
+        else:
+            follow_ups.append(f"Would you like me to dive deeper into any specific aspect of this topic?")
+        
+        return follow_ups[:2]  # Return max 2 relevant follow-ups
     
     def _assess_confidence(self, query: str, context: List[str]) -> str:
         """Assess confidence level for this response"""
@@ -222,11 +244,12 @@ class MultiExpertSystem:
             name="ManufacturingExpert",
             title="Senior Manufacturing Director",
             expertise="Production systems, equipment optimization, and manufacturing processes",
-            personality="Analytical, systematic, and solution-focused with 20+ years of manufacturing experience. Emphasizes efficiency, safety, and continuous improvement.",
+            personality="Experienced manufacturing executive with 20+ years in nutraceutical and pharmaceutical production. Deep knowledge of FDA-regulated manufacturing, lean principles, and Industry 4.0 technologies. References specific industry examples and metrics.",
             specializations=[
                 "production planning", "equipment optimization", "manufacturing processes",
                 "capacity planning", "lean manufacturing", "production scheduling",
-                "manufacturing efficiency", "equipment maintenance", "production troubleshooting"
+                "manufacturing efficiency", "equipment maintenance", "production troubleshooting",
+                "OEE optimization", "changeover reduction", "line balancing"
             ],
             api_key=self.api_key,
             model_name=self.model_name
@@ -237,11 +260,12 @@ class MultiExpertSystem:
             name="QualityExpert",
             title="Director of Quality Assurance",
             expertise="Quality control, compliance, testing protocols, and validation",
-            personality="Meticulous, detail-oriented, and compliance-focused. Prioritizes product safety, regulatory adherence, and systematic quality improvements.",
+            personality="Former FDA auditor with expertise in 21 CFR Part 111 compliance. Specializes in quality systems for dietary supplements and pharmaceuticals. Provides specific regulatory citations and industry best practices from companies like Pharmavite, Nature's Bounty, and NOW Foods.",
             specializations=[
                 "quality control", "quality assurance", "compliance", "testing protocols",
                 "validation", "cGMP", "FDA regulations", "quality systems", "HACCP",
-                "quality audits", "corrective actions", "preventive actions"
+                "quality audits", "corrective actions", "preventive actions",
+                "USP standards", "NSF certification", "third-party testing"
             ],
             api_key=self.api_key,
             model_name=self.model_name
@@ -313,7 +337,7 @@ class MultiExpertSystem:
             name="AccountingExpert",
             title="Chief Financial Officer",
             expertise="Financial management, cost accounting, general accounting, AP/AR, and financial controls",
-            personality="Detail-oriented, analytical, and financially strategic. Focuses on accuracy, compliance, cost optimization, and financial insights to drive business decisions.",
+            personality="CPA with Big 4 experience and deep nutraceutical industry knowledge. Specializes in activity-based costing for manufacturing, inventory valuation methods, and financial KPIs. Provides specific benchmarks from industry leaders and practical examples of cost reduction strategies.",
             specializations=[
                 "cost accounting", "general accounting", "accounts payable", "accounts receivable",
                 "financial reporting", "budgeting", "forecasting", "cash flow management",
@@ -321,7 +345,8 @@ class MultiExpertSystem:
                 "month-end closing", "year-end closing", "inventory accounting", "fixed assets",
                 "payroll", "financial audits", "variance analysis", "profitability analysis",
                 "invoice processing", "vendor management", "payment processing", "collections",
-                "financial statements", "journal entries", "reconciliations", "expense management"
+                "financial statements", "journal entries", "reconciliations", "expense management",
+                "activity-based costing", "standard costing", "manufacturing variances"
             ],
             api_key=self.api_key,
             model_name=self.model_name

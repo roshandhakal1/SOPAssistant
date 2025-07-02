@@ -96,24 +96,7 @@ class RAGHandler:
         if len(query_variations) > 1:
             expansion_note = f"\nNote: Searched for variations including: {', '.join(query_variations[:3])}"
         
-        # Get current time for appropriate greeting
-        from datetime import datetime
-        import pytz
-        
-        pst = pytz.timezone('US/Pacific')
-        current_time = datetime.now(pst)
-        hour = current_time.hour
-        
-        if 5 <= hour < 12:
-            time_greeting = "Good morning"
-        elif 12 <= hour < 17:
-            time_greeting = "Good afternoon"
-        else:
-            time_greeting = "Good evening"
-        
-        prompt = f"""You are a friendly business advisor helping stakeholders understand their operations.{expansion_note}
-
-Current time: {time_greeting} (use this for any greetings if needed, but don't always start with greetings unless natural)
+        prompt = f"""You are a knowledgeable business advisor helping stakeholders understand their operations.{expansion_note}
 
 I've reviewed {len(documents)} relevant documents from your knowledge base to answer your question.
 

@@ -965,25 +965,24 @@ def main():
                         st.markdown(f"#### 🏭 Multi-Expert Consultation ({len(experts_consulted)} experts)")
                         st.info(f"**Experts consulted:** {', '.join([multi_expert_system.experts[name].name for name in experts_consulted])}")
                     
-                    # Display each expert's response (simplified version)
+                    # Display each expert's response (clean professional format)
                     for expert_name, expert_response in expert_responses.items():
                         expert_info = multi_expert_system.experts[expert_name]
                         
                         if len(expert_responses) > 1:
                             st.markdown(f"### 👤 {expert_response['expert_title']}")
                         
-                        # Main response
+                        # Main response - this now contains the full professional advice
                         st.markdown(expert_response['main_response'], unsafe_allow_html=True)
                         
-                        # Show recommendations in a compact format
-                        if expert_response.get('recommendations'):
-                            with st.expander(f"📋 {expert_info.name} Recommendations", expanded=False):
-                                recs = expert_response['recommendations']
-                                for timeframe, rec_list in recs.items():
-                                    if rec_list:
-                                        st.markdown(f"**{timeframe.replace('_', ' ').title()}:**")
-                                        for rec in rec_list[:3]:  # Show top 3
-                                            st.markdown(f"• {rec}")
+                        # Follow-up questions if they exist and are contextual
+                        follow_ups = expert_response.get('follow_up_questions', [])
+                        if follow_ups and any(follow_up for follow_up in follow_ups if follow_up and 'aspect of' not in follow_up):
+                            st.markdown("---")
+                            st.markdown("**💡 Follow-up questions:**")
+                            for question in follow_ups[:2]:
+                                if question and 'aspect of' not in question:
+                                    st.markdown(f"• {question}")
                         
                         if len(expert_responses) > 1:
                             st.markdown("---")
