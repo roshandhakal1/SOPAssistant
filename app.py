@@ -1147,6 +1147,10 @@ def main():
                         for expert_name, expert_resp in expert_responses.items():
                             expert_title = expert_resp['expert_title']
                             response += f"**{expert_title}:**\n\n{expert_resp['main_response']}\n\n---\n\n"
+                    
+                    # Save expert consultation response to chat history
+                    st.session_state.messages.append({"role": "assistant", "content": response})
+                    return
                 
                 except Exception as e:
                     thinking_placeholder.empty()
