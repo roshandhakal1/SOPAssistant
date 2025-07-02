@@ -15,6 +15,41 @@ class RAGHandler:
         self.model_name = model_name
     
     def query(self, question: str, top_k: int = None) -> Tuple[str, List[str]]:
+        # Special handling for document count queries
+        if any(phrase in question.lower() for phrase in ["how many sop", "count sop", "number of sop", "total sop"]):
+            try:
+                # Get actual count from vector database
+                collection_info = self.vector_db.get_collection_info()
+                unique_docs = collection_info.get('unique_documents', 0)
+                total_chunks = collection_info.get('count', 0)
+                
+                # Get unique Google Drive documents
+                gdrive_count = 0
+                try:
+                    results = self.vector_db.collection.get(include=['metadatas'])
+                    if results and results.get('metadatas'):
+                        gdrive_docs = set()
+                        for metadata in results['metadatas']:
+                            if 'gdrive_id' in metadata:
+                                gdrive_docs.add(metadata['gdrive_id'])
+                        gdrive_count = len(gdrive_docs)
+                except:
+                    pass
+                
+                response = f"""## 📊 SOP Database Statistics
+
+**Total Unique SOPs**: {max(unique_docs, gdrive_count)} documents
+
+**Details**:
+• **Processed Documents**: {unique_docs} fully indexed SOPs
+• **Google Drive References**: {gdrive_count} linked documents
+• **Total Data Chunks**: {total_chunks} searchable segments
+
+**Note**: The knowledge base contains both fully processed documents and Google Drive references for comprehensive coverage of your SOP library."""
+                
+                return response, []
+            except Exception as e:
+                pass
         if top_k is None:
             top_k = self.top_k
         

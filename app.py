@@ -792,10 +792,28 @@ def main():
             try:
                 collection_info = vector_db.get_collection_info()
                 total_chunks = collection_info.get('count', 0)
+                unique_docs = collection_info.get('unique_documents', 0)
                 
-                if total_chunks > 0:
-                    estimated_docs = max(1, total_chunks // 6)
-                    st.metric("📄 Documents", f"{estimated_docs}")
+                # Count Google Drive references
+                gdrive_count = 0
+                try:
+                    results = vector_db.collection.get(include=['metadatas'], limit=10000)
+                    if results and results.get('metadatas'):
+                        gdrive_docs = set()
+                        for metadata in results['metadatas']:
+                            if 'gdrive_id' in metadata:
+                                gdrive_docs.add(metadata['gdrive_id'])
+                        gdrive_count = len(gdrive_docs)
+                except:
+                    pass
+                
+                # Show the higher count (either processed docs or gdrive refs)
+                total_sops = max(unique_docs, gdrive_count)
+                
+                if total_sops > 0:
+                    st.metric("📄 Total SOPs", f"{total_sops}")
+                    if gdrive_count > unique_docs:
+                        st.caption(f"🔗 {gdrive_count} Google Drive refs")
                     st.success("✅ Knowledge base is ready")
                 else:
                     st.metric("📄 Documents", "0")
