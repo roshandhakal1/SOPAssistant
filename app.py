@@ -1057,6 +1057,95 @@ def main():
     </div>
     """, unsafe_allow_html=True)
     
+    # Document attachment feature
+    with st.expander("📎 Attach Document (Optional)", expanded=False):
+        st.markdown("Upload a document to use as additional context for this conversation only.")
+        
+        uploaded_file = st.file_uploader(
+            "Choose a file",
+            type=['pdf', 'docx', 'doc', 'txt'],
+            help="Upload a document to provide additional context for your questions",
+            key="chat_document_uploader"
+        )
+        
+        # Initialize session state for attached documents
+        if 'attached_documents' not in st.session_state:
+            st.session_state.attached_documents = {}
+        
+        # Process uploaded document
+        if uploaded_file is not None:
+            try:
+                # Import document processor
+                doc_processor = DocumentProcessor()
+                
+                # Process the uploaded file
+                with st.spinner(f"Processing {uploaded_file.name}..."):
+                    # Save uploaded file temporarily
+                    import tempfile
+                    import os
+                    
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
+                        tmp_file.write(uploaded_file.getvalue())
+                        tmp_file_path = tmp_file.name
+                    
+                    try:
+                        # Extract text from document
+                        extracted_text = doc_processor.extract_text_from_file(tmp_file_path)
+                        
+                        if extracted_text and len(extracted_text.strip()) > 0:
+                            # Store document content in session state
+                            st.session_state.attached_documents[uploaded_file.name] = {
+                                'content': extracted_text,
+                                'filename': uploaded_file.name,
+                                'size': len(extracted_text)
+                            }
+                            
+                            st.success(f"✅ Document '{uploaded_file.name}' processed successfully!")
+                            st.info(f"📄 **{len(extracted_text)} characters** extracted and ready to use as context")
+                        else:
+                            st.error("❌ Could not extract text from the document. Please try a different file.")
+                    
+                    finally:
+                        # Clean up temporary file
+                        if os.path.exists(tmp_file_path):
+                            os.unlink(tmp_file_path)
+                            
+            except Exception as e:
+                st.error(f"❌ Error processing document: {str(e)}")
+        
+        # Show currently attached documents
+        if st.session_state.attached_documents:
+            st.markdown("**📋 Currently Attached Documents:**")
+            for filename, doc_info in st.session_state.attached_documents.items():
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.markdown(f"• **{filename}** ({doc_info['size']:,} characters)")
+                with col2:
+                    if st.button("🗑️ Remove", key=f"remove_{filename}", help=f"Remove {filename}"):
+                        del st.session_state.attached_documents[filename]
+                        st.rerun()
+    
+    # Show attached documents indicator above chat input
+    if st.session_state.get('attached_documents'):
+        doc_count = len(st.session_state.attached_documents)
+        doc_names = list(st.session_state.attached_documents.keys())
+        if doc_count == 1:
+            doc_text = f"📎 **{doc_names[0]}** attached"
+        else:
+            doc_text = f"📎 **{doc_count} documents** attached: {', '.join(doc_names[:2])}"
+            if doc_count > 2:
+                doc_text += f" and {doc_count - 2} more"
+        
+        st.markdown(f"""
+        <div style="text-align: center; margin-bottom: 0.5rem;">
+            <span style="font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif; 
+                         font-size: 0.8rem; color: #0066cc; padding: 4px 12px; 
+                         background: rgba(0, 102, 204, 0.05); border-radius: 16px; border: 1px solid rgba(0, 102, 204, 0.1);">
+                {doc_text}
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+    
     # Unified chat input with smart @mention detection
     prompt = handle_unified_chat_input(multi_expert_system)
     
@@ -1103,6 +1192,13 @@ def main():
                     all_context = []
                     if sop_documents:
                         all_context.extend(sop_documents)
+                    
+                    # Add attached documents as context
+                    if st.session_state.get('attached_documents'):
+                        for filename, doc_info in st.session_state.attached_documents.items():
+                            # Add document content with clear identification
+                            doc_context = f"**From attached document '{filename}':**\n{doc_info['content']}"
+                            all_context.append(doc_context)
                     
                     # Add conversation history as context for experts
                     conversation_context = []
@@ -1244,16 +1340,36 @@ def main():
                             context_parts.append(f"{msg['role'].title()}: {msg['content'][:200]}")
                         conversation_context = "\n".join(context_parts)
                     
-                    # Create enhanced prompt with conversation context
+                    # Add attached documents to context
+                    attached_docs_context = ""
+                    if st.session_state.get('attached_documents'):
+                        attached_parts = []
+                        for filename, doc_info in st.session_state.attached_documents.items():
+                            attached_parts.append(f"**From attached document '{filename}':**\n{doc_info['content']}")
+                        attached_docs_context = "\n\n".join(attached_parts)
+                    
+                    # Create enhanced prompt with conversation context and attached documents
+                    prompt_parts = []
+                    
                     if conversation_context:
-                        enhanced_prompt = f"""Previous conversation context:
-{conversation_context}
-
-Current question: {prompt}
-
-Please answer the current question, taking into account the conversation context above. If this is a follow-up question, make sure to reference previous topics discussed."""
-                    else:
-                        enhanced_prompt = prompt
+                        prompt_parts.append(f"Previous conversation context:\n{conversation_context}")
+                    
+                    if attached_docs_context:
+                        prompt_parts.append(f"Additional attached documents for context:\n{attached_docs_context}")
+                    
+                    prompt_parts.append(f"Current question: {prompt}")
+                    
+                    if conversation_context or attached_docs_context:
+                        context_instruction = "Please answer the current question, taking into account"
+                        if conversation_context and attached_docs_context:
+                            context_instruction += " the conversation context and attached documents above."
+                        elif conversation_context:
+                            context_instruction += " the conversation context above. If this is a follow-up question, make sure to reference previous topics discussed."
+                        elif attached_docs_context:
+                            context_instruction += " the attached documents above for additional context."
+                        prompt_parts.append(context_instruction)
+                    
+                    enhanced_prompt = "\n\n".join(prompt_parts) if len(prompt_parts) > 1 else prompt
                     
                     # Get response from SOP knowledge base with context
                     response, sop_sources = rag_handler.query(enhanced_prompt)
