@@ -58,52 +58,53 @@ def initialize_components():
     return config, doc_processor, embeddings_manager, vector_db, chat_history_manager
 
 def handle_unified_chat_input(multi_expert_system):
-    """Apple-inspired minimal chat interface"""
+    """Simplified chat interface using sidebar mode selection"""
     
-    # Get available experts
-    available_experts = multi_expert_system.get_available_experts()
+    # Get the selected mode from sidebar
+    selected_mode = st.session_state.get('selected_mode', 'general')
     
-    # Mode selector above chat input (not in columns)
-    expert_options = ["💬 General Search"]
-    expert_values = [""]
+    # Map mode to expert mention
+    mode_to_expert = {
+        'general': '',
+        'quality': '@QualityExpert',
+        'manufacturing': '@ManufacturingExpert',
+        'accounting': '@AccountingExpert',
+        'safety': '@SafetyExpert',
+        'maintenance': '@MaintenanceExpert'
+    }
     
-    for expert_name, expert_info in available_experts.items():
-        clean_name = expert_name.replace("Expert", "")
-        expert_options.append(f"🎯 {clean_name}")
-        expert_values.append(f"@{expert_name}")
+    # Show current mode above chat input
+    mode_names = {
+        'general': '📚 General Search Mode',
+        'quality': '🔬 Quality Expert Mode',
+        'manufacturing': '🏭 Manufacturing Expert Mode',
+        'accounting': '💰 Accounting Expert Mode',
+        'safety': '🦺 Safety Expert Mode',
+        'maintenance': '🔧 Maintenance Expert Mode'
+    }
     
-    # Compact expert selector right above chat input
-    col1, col2, col3 = st.columns([1, 2, 1])
+    # Display active mode indicator
+    st.markdown(f"""
+    <div style="text-align: center; margin-bottom: 1rem;">
+        <span style="font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif; 
+                     font-size: 0.9rem; color: #86868b; padding: 6px 16px; 
+                     background: rgba(0,0,0,0.05); border-radius: 20px;">
+            {mode_names.get(selected_mode, '📚 General Search Mode')}
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
     
-    with col1:
-        # Shorten the expert options to max 20 characters
-        short_expert_options = []
-        for opt in expert_options:
-            if len(opt) > 20:
-                short_expert_options.append(opt[:17] + "...")
-            else:
-                short_expert_options.append(opt)
-        
-        selected_index = st.selectbox(
-            "",
-            range(len(short_expert_options)),
-            format_func=lambda x: short_expert_options[x],
-            key="expert_mode_selector",
-            label_visibility="collapsed"
-        )
-        
-        selected_expert = expert_values[selected_index]
-    
-    # Chat input (outside columns as required by Streamlit)
+    # Chat input
     user_question = st.chat_input(
         "Ask your question...",
         key="main_chat_input"
     )
     
-    # Process the input
+    # Process the input with selected mode
     if user_question:
-        if selected_expert:
-            return f"{selected_expert} {user_question}"
+        expert_prefix = mode_to_expert.get(selected_mode, '')
+        if expert_prefix:
+            return f"{expert_prefix} {user_question}"
         else:
             return user_question
     
@@ -670,18 +671,115 @@ def main():
     with st.sidebar:
         st.markdown("### 🏭 Knowledge Assistant")
         
-        # Simple help section
-        with st.expander("💡 Quick Tips", expanded=False):
+        # Expert Mode Selection - ALWAYS VISIBLE
+        st.markdown("### 🎯 Assistant Mode")
+        
+        # Initialize selected mode if not exists
+        if 'selected_mode' not in st.session_state:
+            st.session_state.selected_mode = 'general'
+        
+        # Get available experts
+        available_experts = multi_expert_system.get_available_experts()
+        
+        # Create mode options with better visual hierarchy
+        st.markdown("""
+        <style>
+        .stRadio > label {
+            font-size: 0.9rem !important;
+            color: #86868b !important;
+        }
+        .stRadio > div {
+            gap: 0.5rem !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # Mode selection with clear visual feedback
+        mode_col1, mode_col2 = st.columns([3, 1])
+        
+        with mode_col1:
+            st.markdown("**Select Assistant Type:**")
+        
+        with mode_col2:
+            if st.button("ℹ️", help="Choose an assistant based on your question type"):
+                pass
+        
+        # Create cleaner mode options
+        mode_options = {
+            'general': {
+                'name': '📚 General Search', 
+                'short': 'General',
+                'desc': 'Search across all SOPs and documentation'
+            },
+            'quality': {
+                'name': '🔬 Quality Expert', 
+                'short': 'Quality',
+                'desc': 'FDA compliance, testing protocols, validation'
+            },
+            'manufacturing': {
+                'name': '🏭 Manufacturing Expert', 
+                'short': 'Manufacturing',
+                'desc': 'Production systems, equipment, efficiency'
+            },
+            'accounting': {
+                'name': '💰 Accounting Expert', 
+                'short': 'Accounting',
+                'desc': 'Cost analysis, financial controls, budgeting'
+            },
+            'safety': {
+                'name': '🦺 Safety Expert', 
+                'short': 'Safety',
+                'desc': 'EHS compliance, OSHA, risk assessment'
+            },
+            'maintenance': {
+                'name': '🔧 Maintenance Expert', 
+                'short': 'Maintenance',
+                'desc': 'Equipment reliability, preventive maintenance'
+            }
+        }
+        
+        # Radio buttons with better styling
+        selected_mode = st.radio(
+            "",
+            options=list(mode_options.keys()),
+            format_func=lambda x: mode_options[x]['name'],
+            key='mode_selector',
+            index=list(mode_options.keys()).index(st.session_state.selected_mode),
+            label_visibility="collapsed"
+        )
+        
+        # Update session state
+        st.session_state.selected_mode = selected_mode
+        
+        # Show active mode with better styling
+        if selected_mode in mode_options:
+            mode_info = mode_options[selected_mode]
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); 
+                        padding: 12px; border-radius: 8px; margin-top: 8px;
+                        border-left: 4px solid #0284c7;">
+                <div style="font-weight: 600; color: #0c4a6e; margin-bottom: 4px;">
+                    Currently Active: {mode_info['short']}
+                </div>
+                <div style="font-size: 0.85rem; color: #475569;">
+                    {mode_info['desc']}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.divider()
+        
+        # Simplified help section
+        with st.expander("💡 How to Use", expanded=False):
             st.markdown("""
-            **Expert Mentions:**
-            Type `@` followed by expert name
+            **1. Select Mode Above**
+            Choose General Search or a specific expert
             
-            **Examples:**
-            • `@Quality` - Quality & compliance
-            • `@Manufacturing` - Production issues  
-            • `@Safety` - Safety protocols
+            **2. Ask Your Question**
+            Type naturally in the chat below
             
-            **Pro tip:** Ask normally for SOP search
+            **3. Get Targeted Answers**
+            Responses tailored to your selected mode
             """)
         
         # Usage stats (if helpful)
