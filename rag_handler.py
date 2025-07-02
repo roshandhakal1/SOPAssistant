@@ -100,24 +100,26 @@ class RAGHandler:
 
 I've reviewed {len(documents)} relevant documents from your knowledge base to answer your question.
 
+RELEVANT INFORMATION FROM YOUR SOPS:
+{context}
+
 QUESTION: {question}
 
 Please provide a clear, stakeholder-friendly response that:
-- Focuses on what matters most to the business
-- Uses conversational language, not technical jargon
-- Organizes information in a scannable format
-- Keeps explanations concise and practical
-- Only mentions document references when they add specific value
+- Uses the SPECIFIC information from the SOPs above to give a comprehensive answer
+- Translates technical procedures into business value and impact
+- Includes specific activities like CAPA, NCAs, production testing, audits, etc.
+- Organizes the wide range of activities into logical groups
+- Shows the business impact of each area
+- Uses conversational language while being thorough and specific
 
-Think of this as a conversation with an executive who wants clear insights, not a document dump.
+Think of this as briefing an executive on what their QA department actually does day-to-day, using real information from your procedures.
 
 Format your response naturally with:
-- Clear headings for main topics
-- Short paragraphs
-- Bullet points for lists
-- Bold text for emphasis
-- NO long lists of document names
-- NO technical SOP citations unless specifically requested
+- Clear headings for main activity areas
+- Specific examples from the SOPs
+- Business impact of each function
+- Comprehensive coverage of all major activities
 
 CONVERSATIONAL, STAKEHOLDER-FRIENDLY ANSWER:"""
         
