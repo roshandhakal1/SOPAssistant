@@ -1056,8 +1056,15 @@ def main():
                     # Combine SOP context with conversation context
                     full_context = all_context + [f"Previous conversation:\n" + "\n".join(conversation_context)]
                     
-                    # Consult experts with full context
-                    consultation_result = multi_expert_system.consult_experts(prompt, full_context)
+                    # Get user information for personalized responses
+                    user_info = {
+                        'name': st.session_state.get('user_name', ''),
+                        'role': st.session_state.get('user_role', 'team member'),
+                        'username': st.session_state.get('username', '')
+                    }
+                    
+                    # Consult experts with full context and user info
+                    consultation_result = multi_expert_system.consult_experts(prompt, full_context, user_info)
                     
                     # Extract results from consultation
                     experts_consulted = consultation_result['experts_consulted']

@@ -50,10 +50,10 @@ class ExpertPersona:
         return min(relevance_score, 1.0)
     
     def generate_response(self, query: str, context: List[str], 
-                         collaboration_context: str = "") -> Dict[str, Any]:
+                         collaboration_context: str = "", user_info: Dict = None) -> Dict[str, Any]:
         """Generate a response from this expert's perspective"""
         
-        prompt = self._build_expert_prompt(query, context, collaboration_context)
+        prompt = self._build_expert_prompt(query, context, collaboration_context, user_info)
         
         try:
             generation_config = {
@@ -92,22 +92,8 @@ class ExpertPersona:
             return self._generate_fallback_response(query)
     
     def _build_expert_prompt(self, query: str, context: List[str], 
-                           collaboration_context: str = "") -> str:
+                           collaboration_context: str = "", user_info: Dict = None) -> str:
         """Build expert-specific prompt"""
-        
-        # Get current time for appropriate greeting
-        import pytz
-        
-        pst = pytz.timezone('US/Pacific')
-        current_time = datetime.now(pst)
-        hour = current_time.hour
-        
-        if 5 <= hour < 12:
-            time_greeting = "Good morning"
-        elif 12 <= hour < 17:
-            time_greeting = "Good afternoon"
-        else:
-            time_greeting = "Good evening"
         
         return f"""
         You are {self.name}, a {self.title} specializing in {self.expertise}.
@@ -118,6 +104,8 @@ class ExpertPersona:
         {chr(10).join(f"- {spec}" for spec in self.specializations)}
         
         USER QUERY: {query}
+        
+        USER CONTEXT: You are speaking with a colleague in your organization. {f"The user's name is {user_info.get('name', '')} and they are a {user_info.get('role', 'team member')}." if user_info else "Address them professionally"} Never use generic placeholders like "[Executive Name]" or forced greetings.
         
         RELEVANT SOP CONTEXT:
         {chr(10).join(context) if context else "No specific SOP context available"}
@@ -140,12 +128,16 @@ class ExpertPersona:
         - "Companies like Nature's Bounty and NOW Foods typically implement a three-stage verification process..."
         - "FDA guidance CFR 21 Part 111 requires documentation of..."
         - "In my experience with similar production volumes, implementing a statistical process control system reduced defects by 35%..."
+        - "The RTS process involves several critical steps that directly impact inventory accuracy and product integrity..."
         
-        DO NOT include formulaic sections like "Immediate/Short-term/Long-term" recommendations.
-        DO NOT start with time-based greetings.
-        DO NOT use generic placeholder text.
+        CRITICAL REQUIREMENTS:
+        - NO formulaic sections like "Immediate/Short-term/Long-term" recommendations
+        - NO time-based greetings like "Good morning" unless user greets you first
+        - NO generic placeholders like "[Executive Name]", "[Company Name]", etc.
+        - NO template-style responses
+        - Address the user directly and professionally as a colleague
         
-        Write as if you're a highly experienced professional giving specific, valuable advice to a colleague.
+        Write as if you're a highly experienced professional giving specific, valuable advice to a colleague in your organization.
         """
     
     def _format_sop_references(self, text: str) -> str:
@@ -439,7 +431,7 @@ class MultiExpertSystem:
         expert_scores.sort(key=lambda x: x[1], reverse=True)
         return [name for name, score in expert_scores[:max_experts]]
     
-    def consult_experts(self, query: str, context: List[str]) -> Dict[str, Any]:
+    def consult_experts(self, query: str, context: List[str], user_info: Dict = None) -> Dict[str, Any]:
         """Main consultation method that handles @mentions and expert selection"""
         
         # Parse @mentions
@@ -463,7 +455,7 @@ class MultiExpertSystem:
         for expert_name in selected_experts:
             if expert_name in self.experts:
                 response = self.experts[expert_name].generate_response(
-                    query, context, collaboration_context
+                    query, context, collaboration_context, user_info
                 )
                 expert_responses[expert_name] = response
                 
