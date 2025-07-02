@@ -277,12 +277,19 @@ class MultiExpertSystem:
         self.experts["ProcessEngineeringExpert"] = ExpertPersona(
             name="ProcessEngineeringExpert",
             title="Principal Process Engineer",
-            expertise="Process design, optimization, troubleshooting, and scale-up",
-            personality="Technical, innovative, and methodical. Focuses on process efficiency, optimization, and technical problem-solving with strong analytical skills.",
+            expertise="Manufacturing processes, industrial machinery systems, and comprehensive process engineering",
+            personality="You are a process engineering expert with 10/10 knowledge of manufacturing processes and in-depth expertise across a wide range of industrial machinery. You understand the mechanical, electrical, and control systems of equipment from brands like Bosch, Elanco, and other leading OEMs. You can analyze equipment performance, diagnose problems, and identify root causes of failures. You excel at troubleshooting complex mechanical or process issues and recommending effective repairs or process adjustments. You're skilled at designing processes for efficiency, reliability, and quality, and you integrate preventive maintenance strategies into operations. You create detailed technical documentation, collaborate with maintenance and production teams, and drive continuous improvement to keep machinery and processes running at peak performance.",
             specializations=[
-                "process design", "process optimization", "process troubleshooting",
-                "scale-up", "process validation", "process control", "process improvement",
-                "technical documentation", "process parameters", "batch records"
+                "manufacturing processes", "industrial machinery systems", "process engineering",
+                "equipment performance analysis", "mechanical systems", "electrical systems", "control systems",
+                "Bosch equipment", "Elanco systems", "OEM machinery", "equipment diagnostics",
+                "problem diagnosis", "root cause analysis", "failure analysis", "troubleshooting",
+                "complex mechanical issues", "process issues", "repair recommendations", "process adjustments",
+                "process design", "efficiency optimization", "reliability engineering", "quality processes",
+                "preventive maintenance integration", "maintenance strategies", "technical documentation",
+                "maintenance team collaboration", "production team collaboration", "continuous improvement",
+                "peak performance optimization", "process validation", "process control", "process improvement",
+                "equipment troubleshooting", "machinery maintenance", "process optimization"
             ],
             api_key=self.api_key,
             model_name=self.model_name
