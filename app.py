@@ -906,6 +906,41 @@ def main():
         
         st.divider()
         
+        # Chat History Viewer
+        with st.expander("📚 Chat History", expanded=False):
+            username = st.session_state.get('username', 'unknown')
+            recent_chats = chat_history_manager.get_recent_chats(username, limit=10)
+            
+            if recent_chats:
+                st.markdown("**Recent Conversations:**")
+                for i, chat in enumerate(recent_chats):
+                    chat_title = chat.get('title', 'Untitled Chat')
+                    chat_date = datetime.fromisoformat(chat.get('timestamp', '')).strftime('%m/%d %H:%M')
+                    message_count = chat.get('message_count', 0)
+                    
+                    col1, col2, col3 = st.columns([3, 1, 1])
+                    with col1:
+                        if st.button(f"💬 {chat_title}", key=f"load_chat_{i}", help=f"Load chat from {chat_date}"):
+                            # Load the selected chat
+                            st.session_state.messages = chat['messages'].copy()
+                            st.rerun()
+                    with col2:
+                        st.caption(f"{message_count} msgs")
+                    with col3:
+                        if st.button("🗑️", key=f"delete_chat_{i}", help="Delete chat"):
+                            chat_history_manager.delete_chat(username, chat['id'])
+                            st.rerun()
+                
+                st.divider()
+                if st.button("🗑️ Clear All History", type="secondary"):
+                    chat_history_manager.clear_all_chats(username)
+                    st.success("Chat history cleared!")
+                    st.rerun()
+            else:
+                st.info("No chat history yet. Your conversations will be automatically saved here.")
+        
+        st.divider()
+        
         # Simplified Chat Controls
         with st.expander("💬 Chat Controls", expanded=False):
             col1, col2 = st.columns(2)
@@ -1322,6 +1357,16 @@ def main():
                     
                     # Save expert consultation response to chat history
                     st.session_state.messages.append({"role": "assistant", "content": response})
+                    
+                    # Auto-save chat after assistant response
+                    if len(st.session_state.messages) >= 2:  # At least one user + one assistant message
+                        username = st.session_state.get('username', 'unknown')
+                        chat_data = {
+                            'messages': st.session_state.messages.copy(),
+                            'mode': st.session_state.get('selected_mode', 'general')
+                        }
+                        chat_history_manager.save_chat(username, chat_data)
+                    
                     return
                 
                 except Exception as e:
@@ -1438,6 +1483,15 @@ def main():
                     return
         
         st.session_state.messages.append({"role": "assistant", "content": response})
+        
+        # Auto-save chat after assistant response
+        if len(st.session_state.messages) >= 2:  # At least one user + one assistant message
+            username = st.session_state.get('username', 'unknown')
+            chat_data = {
+                'messages': st.session_state.messages.copy(),
+                'mode': st.session_state.get('selected_mode', 'general')
+            }
+            chat_history_manager.save_chat(username, chat_data)
     
     if not vector_db.has_documents():
         st.warning("⚠️ No documents found in the vector database. Click 'Check for Updates' to process your SOP documents.")
