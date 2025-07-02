@@ -121,19 +121,32 @@ class VectorDatabase:
             
             # Count unique source files by filename (not full path)
             unique_sources = set()
+            filename_counts = {}  # Track duplicates
+            
             for metadata in metadatas:
                 # Prefer filename field which is just the name
                 if 'filename' in metadata and metadata['filename']:
-                    unique_sources.add(metadata['filename'])
+                    filename = metadata['filename']
+                    unique_sources.add(filename)
+                    filename_counts[filename] = filename_counts.get(filename, 0) + 1
                 elif 'source' in metadata and metadata['source']:
                     # Extract filename from full path as fallback
                     from pathlib import Path
                     filename = Path(metadata['source']).name
                     unique_sources.add(filename)
+                    filename_counts[filename] = filename_counts.get(filename, 0) + 1
             
-            print(f"Unique sources found: {len(unique_sources)}")
+            # Debug: Find files that appear multiple times
+            duplicates = {k: v for k, v in filename_counts.items() if v > 1}
+            if duplicates:
+                print(f"Files appearing multiple times: {len(duplicates)}")
+                # Show top 5 duplicates
+                for filename, count in sorted(duplicates.items(), key=lambda x: x[1], reverse=True)[:5]:
+                    print(f"  {filename}: {count} chunks")
+            
+            print(f"Unique documents found: {len(unique_sources)}")
             if unique_sources:
-                print(f"Sample sources: {list(unique_sources)[:3]}")
+                print(f"Sample documents: {list(unique_sources)[:3]}")
             
             return len(unique_sources)
         except Exception as e:
