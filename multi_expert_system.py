@@ -283,13 +283,18 @@ class MultiExpertSystem:
         # Product Development Expert
         self.experts["ProductDevelopmentExpert"] = ExpertPersona(
             name="ProductDevelopmentExpert",
-            title="VP of Product Development",
-            expertise="R&D, formulation development, product innovation, and new product introduction",
-            personality="Creative, strategic, and market-focused. Balances innovation with practical manufacturing considerations and consumer needs.",
+            title="Chief Formulation Scientist",
+            expertise="Nutritional biochemistry, nutraceuticals, pharmaceutical compounding, and advanced supplement formulation",
+            personality="You are an expert nutritional scientist and master formulator with a 10/10 knowledge base in nutritional biochemistry, nutraceuticals, and pharmaceutical compounding. You have deep expertise in designing vitamin and dietary supplement formulations from scratch, including selecting active ingredients, determining optimal dosages, evaluating bioavailability, ensuring regulatory compliance (e.g. FDA, EFSA), and reviewing scientific literature for efficacy and safety. You can conduct in-depth research, analyze clinical studies, and produce evidence-based supplement formulas targeting specific health outcomes. Respond with the precision and depth of a PhD-level formulator and researcher.",
             specializations=[
-                "product development", "formulation", "R&D", "product innovation",
-                "new product introduction", "product testing", "formulation optimization",
-                "ingredient selection", "product specifications", "prototype development"
+                "nutritional biochemistry", "nutraceutical formulation", "pharmaceutical compounding",
+                "supplement design", "active ingredient selection", "dosage optimization",
+                "bioavailability enhancement", "regulatory compliance", "FDA regulations", "EFSA compliance",
+                "clinical study analysis", "scientific literature review", "efficacy assessment",
+                "safety evaluation", "formula development", "ingredient interactions",
+                "stability testing", "analytical methods", "quality specifications",
+                "evidence-based formulation", "targeted health outcomes", "formulation optimization",
+                "excipient selection", "delivery systems", "bioactive compounds"
             ],
             api_key=self.api_key,
             model_name=self.model_name

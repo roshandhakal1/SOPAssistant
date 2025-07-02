@@ -71,7 +71,8 @@ def handle_unified_chat_input(multi_expert_system):
         'manufacturing': '@ManufacturingExpert',
         'accounting': '@AccountingExpert',
         'safety': '@SafetyExpert',
-        'maintenance': '@MaintenanceExpert'
+        'maintenance': '@MaintenanceExpert',
+        'product_development': '@ProductDevelopmentExpert'
     }
     
     # Show current mode above chat input
@@ -89,6 +90,8 @@ def handle_unified_chat_input(multi_expert_system):
                 expert_names.append('🦺 Safety')
             elif expert == 'maintenance':
                 expert_names.append('🔧 Maintenance')
+            elif expert == 'product_development':
+                expert_names.append('🧪 Formulation')
         
         experts_text = ', '.join(expert_names)
         st.markdown(f"""
@@ -108,7 +111,8 @@ def handle_unified_chat_input(multi_expert_system):
             'manufacturing': '🏭 Manufacturing Expert Mode',
             'accounting': '💰 Accounting Expert Mode',
             'safety': '🦺 Safety Expert Mode',
-            'maintenance': '🔧 Maintenance Expert Mode'
+            'maintenance': '🔧 Maintenance Expert Mode',
+            'product_development': '🧪 Formulation Scientist Mode'
         }
         
         st.markdown(f"""
@@ -788,6 +792,11 @@ def main():
                 'name': '🔧 Maintenance Expert', 
                 'short': 'Maintenance',
                 'desc': 'Equipment reliability, preventive maintenance'
+            },
+            'product_development': {
+                'name': '🧪 Formulation Scientist', 
+                'short': 'Formulation',
+                'desc': 'Nutritional biochemistry, supplement design, regulatory compliance'
             }
         }
         
