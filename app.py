@@ -733,13 +733,29 @@ def main():
         """, unsafe_allow_html=True)
         
         # Mode selection with clear visual feedback
-        mode_col1, mode_col2 = st.columns([2.5, 1.5])
+        mode_col1, mode_col2 = st.columns([2, 2])
         
         with mode_col1:
             st.markdown("**Select Assistant Type:**")
         
         with mode_col2:
-            multi_mode = st.toggle("Multi-Expert", help="Get insights from multiple experts at once")
+            # Add CSS to prevent text wrapping in toggle
+            st.markdown("""
+            <style>
+            .stToggle label {
+                white-space: nowrap !important;
+                overflow: visible !important;
+                text-overflow: clip !important;
+                min-width: max-content !important;
+            }
+            .stToggle > div {
+                min-width: max-content !important;
+                width: auto !important;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            
+            multi_mode = st.toggle("Multi", help="Multi-Expert Mode: Get insights from multiple experts at once")
         
         # Create cleaner mode options
         mode_options = {
@@ -801,11 +817,14 @@ def main():
                 st.markdown(f"""
                 <div style="background: linear-gradient(135deg, #fef3c7 0%, #fbbf24 20%); 
                             padding: 12px; border-radius: 8px; margin-top: 8px;
-                            border-left: 4px solid #f59e0b;">
-                    <div style="font-weight: 600; color: #92400e; margin-bottom: 4px;">
+                            border-left: 4px solid #f59e0b; width: 100%; box-sizing: border-box;">
+                    <div style="font-weight: 600; color: #92400e; margin-bottom: 4px; 
+                               white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+                               min-width: 0; word-break: keep-all;">
                         Multi-Expert Mode: {', '.join(expert_names)}
                     </div>
-                    <div style="font-size: 0.85rem; color: #78350f;">
+                    <div style="font-size: 0.85rem; color: #78350f; 
+                               white-space: normal; word-wrap: break-word;">
                         Get insights from multiple expert perspectives
                     </div>
                 </div>
