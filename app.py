@@ -62,6 +62,7 @@ def handle_unified_chat_input(multi_expert_system):
     
     # Get the selected mode from sidebar
     selected_mode = st.session_state.get('selected_mode', 'general')
+    selected_experts = st.session_state.get('selected_experts', [])
     
     # Map mode to expert mention
     mode_to_expert = {
@@ -74,25 +75,51 @@ def handle_unified_chat_input(multi_expert_system):
     }
     
     # Show current mode above chat input
-    mode_names = {
-        'general': '📚 General Search Mode',
-        'quality': '🔬 Quality Expert Mode',
-        'manufacturing': '🏭 Manufacturing Expert Mode',
-        'accounting': '💰 Accounting Expert Mode',
-        'safety': '🦺 Safety Expert Mode',
-        'maintenance': '🔧 Maintenance Expert Mode'
-    }
-    
-    # Display active mode indicator
-    st.markdown(f"""
-    <div style="text-align: center; margin-bottom: 1rem;">
-        <span style="font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif; 
-                     font-size: 0.9rem; color: #86868b; padding: 6px 16px; 
-                     background: rgba(0,0,0,0.05); border-radius: 20px;">
-            {mode_names.get(selected_mode, '📚 General Search Mode')}
-        </span>
-    </div>
-    """, unsafe_allow_html=True)
+    if selected_mode == 'multi' and selected_experts:
+        # Multi-expert mode indicator
+        expert_names = []
+        for expert in selected_experts:
+            if expert == 'quality':
+                expert_names.append('🔬 Quality')
+            elif expert == 'manufacturing':
+                expert_names.append('🏭 Manufacturing')
+            elif expert == 'accounting':
+                expert_names.append('💰 Accounting')
+            elif expert == 'safety':
+                expert_names.append('🦺 Safety')
+            elif expert == 'maintenance':
+                expert_names.append('🔧 Maintenance')
+        
+        experts_text = ', '.join(expert_names)
+        st.markdown(f"""
+        <div style="text-align: center; margin-bottom: 1rem;">
+            <span style="font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif; 
+                         font-size: 0.9rem; color: #92400e; padding: 6px 16px; 
+                         background: linear-gradient(135deg, #fef3c7 0%, #fbbf24 20%); border-radius: 20px;">
+                🎯 Multi-Expert Mode: {experts_text}
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        # Single mode indicator
+        mode_names = {
+            'general': '📚 General Search Mode',
+            'quality': '🔬 Quality Expert Mode',
+            'manufacturing': '🏭 Manufacturing Expert Mode',
+            'accounting': '💰 Accounting Expert Mode',
+            'safety': '🦺 Safety Expert Mode',
+            'maintenance': '🔧 Maintenance Expert Mode'
+        }
+        
+        st.markdown(f"""
+        <div style="text-align: center; margin-bottom: 1rem;">
+            <span style="font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif; 
+                         font-size: 0.9rem; color: #86868b; padding: 6px 16px; 
+                         background: rgba(0,0,0,0.05); border-radius: 20px;">
+                {mode_names.get(selected_mode, '📚 General Search Mode')}
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
     
     # Chat input
     user_question = st.chat_input(
@@ -102,11 +129,24 @@ def handle_unified_chat_input(multi_expert_system):
     
     # Process the input with selected mode
     if user_question:
-        expert_prefix = mode_to_expert.get(selected_mode, '')
-        if expert_prefix:
-            return f"{expert_prefix} {user_question}"
+        if selected_mode == 'multi' and selected_experts:
+            # Multi-expert mode: add multiple @mentions
+            expert_mentions = []
+            for expert in selected_experts:
+                if expert in mode_to_expert:
+                    expert_mentions.append(mode_to_expert[expert])
+            
+            if expert_mentions:
+                return f"{' '.join(expert_mentions)} {user_question}"
+            else:
+                return user_question
         else:
-            return user_question
+            # Single expert mode
+            expert_prefix = mode_to_expert.get(selected_mode, '')
+            if expert_prefix:
+                return f"{expert_prefix} {user_question}"
+            else:
+                return user_question
     
     return None
 
@@ -693,14 +733,13 @@ def main():
         """, unsafe_allow_html=True)
         
         # Mode selection with clear visual feedback
-        mode_col1, mode_col2 = st.columns([3, 1])
+        mode_col1, mode_col2 = st.columns([2.5, 1.5])
         
         with mode_col1:
             st.markdown("**Select Assistant Type:**")
         
         with mode_col2:
-            if st.button("ℹ️", help="Choose an assistant based on your question type"):
-                pass
+            multi_mode = st.toggle("Multi-Expert", help="Get insights from multiple experts at once")
         
         # Create cleaner mode options
         mode_options = {
@@ -736,34 +775,74 @@ def main():
             }
         }
         
-        # Radio buttons with better styling
-        selected_mode = st.radio(
-            "",
-            options=list(mode_options.keys()),
-            format_func=lambda x: mode_options[x]['name'],
-            key='mode_selector',
-            index=list(mode_options.keys()).index(st.session_state.selected_mode),
-            label_visibility="collapsed"
-        )
-        
-        # Update session state
-        st.session_state.selected_mode = selected_mode
-        
-        # Show active mode with better styling
-        if selected_mode in mode_options:
-            mode_info = mode_options[selected_mode]
-            st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); 
-                        padding: 12px; border-radius: 8px; margin-top: 8px;
-                        border-left: 4px solid #0284c7;">
-                <div style="font-weight: 600; color: #0c4a6e; margin-bottom: 4px;">
-                    Currently Active: {mode_info['short']}
+        if multi_mode:
+            # Multi-select for multiple experts
+            st.markdown("**Select multiple experts:**")
+            
+            # Expert options (excluding general for multi-mode)
+            expert_options = {k: v for k, v in mode_options.items() if k != 'general'}
+            
+            selected_experts = st.multiselect(
+                "",
+                options=list(expert_options.keys()),
+                format_func=lambda x: expert_options[x]['name'],
+                default=[],
+                key='multi_expert_selector',
+                label_visibility="collapsed"
+            )
+            
+            # Update session state for multi-mode
+            st.session_state.selected_mode = 'multi'
+            st.session_state.selected_experts = selected_experts
+            
+            # Show active experts
+            if selected_experts:
+                expert_names = [expert_options[exp]['short'] for exp in selected_experts]
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, #fef3c7 0%, #fbbf24 20%); 
+                            padding: 12px; border-radius: 8px; margin-top: 8px;
+                            border-left: 4px solid #f59e0b;">
+                    <div style="font-weight: 600; color: #92400e; margin-bottom: 4px;">
+                        Multi-Expert Mode: {', '.join(expert_names)}
+                    </div>
+                    <div style="font-size: 0.85rem; color: #78350f;">
+                        Get insights from multiple expert perspectives
+                    </div>
                 </div>
-                <div style="font-size: 0.85rem; color: #475569;">
-                    {mode_info['desc']}
+                """, unsafe_allow_html=True)
+            else:
+                st.info("Select experts to get multiple perspectives on your questions")
+        
+        else:
+            # Single select radio buttons
+            selected_mode = st.radio(
+                "",
+                options=list(mode_options.keys()),
+                format_func=lambda x: mode_options[x]['name'],
+                key='mode_selector',
+                index=list(mode_options.keys()).index(st.session_state.selected_mode) if st.session_state.selected_mode in mode_options else 0,
+                label_visibility="collapsed"
+            )
+            
+            # Update session state
+            st.session_state.selected_mode = selected_mode
+            st.session_state.selected_experts = []  # Clear multi-select when in single mode
+            
+            # Show active mode with better styling
+            if selected_mode in mode_options:
+                mode_info = mode_options[selected_mode]
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); 
+                            padding: 12px; border-radius: 8px; margin-top: 8px;
+                            border-left: 4px solid #0284c7;">
+                    <div style="font-weight: 600; color: #0c4a6e; margin-bottom: 4px;">
+                        Currently Active: {mode_info['short']}
+                    </div>
+                    <div style="font-size: 0.85rem; color: #475569;">
+                        {mode_info['desc']}
+                    </div>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
         
         st.divider()
         
