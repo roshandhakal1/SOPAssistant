@@ -1105,22 +1105,33 @@ def main():
                     # Clear thinking animation and display response in same container
                     thinking_placeholder.empty()
                     
+                    # Check if this is a follow-up (recent expert responses in chat history)
+                    recent_expert_response = False
+                    if st.session_state.messages:
+                        # Check last few messages for expert consultations
+                        for msg in st.session_state.messages[-3:]:
+                            if msg.get('role') == 'assistant' and ('Expert' in msg.get('content', '') or 'Consultation' in msg.get('content', '')):
+                                recent_expert_response = True
+                                break
+                    
                     # Display the complete response in the placeholder
                     with thinking_placeholder.container():
-                        # Header with experts consulted
-                        if len(experts_consulted) == 1:
-                            expert_name = experts_consulted[0]
-                            expert_info = multi_expert_system.experts[expert_name]
-                            st.markdown(f"#### 🎯 {expert_info.title} Analysis")
-                        else:
-                            st.markdown(f"#### 🏭 Multi-Expert Consultation ({len(experts_consulted)} experts)")
-                            st.info(f"**Experts consulted:** {', '.join([multi_expert_system.experts[name].name for name in experts_consulted])}")
+                        # Header with experts consulted (only if not a follow-up)
+                        if not recent_expert_response:
+                            if len(experts_consulted) == 1:
+                                expert_name = experts_consulted[0]
+                                expert_info = multi_expert_system.experts[expert_name]
+                                st.markdown(f"#### 🎯 {expert_info.title} Analysis")
+                            else:
+                                st.markdown(f"#### 🏭 Multi-Expert Consultation ({len(experts_consulted)} experts)")
+                                st.info(f"**Experts consulted:** {', '.join([multi_expert_system.experts[name].name for name in experts_consulted])}")
                         
                         # Display each expert's response (clean professional format)
                         for expert_name, expert_response in expert_responses.items():
                             expert_info = multi_expert_system.experts[expert_name]
                             
-                            if len(expert_responses) > 1:
+                            # Only show expert titles for multi-expert AND not follow-up
+                            if len(expert_responses) > 1 and not recent_expert_response:
                                 st.markdown(f"### 👤 {expert_response['expert_title']}")
                             
                             # Main response - this now contains the full professional advice
@@ -1138,15 +1149,34 @@ def main():
                             if len(expert_responses) > 1:
                                 st.markdown("---")
                     
-                    # Prepare response for chat history
-                    if len(expert_responses) == 1:
-                        response = list(expert_responses.values())[0]['main_response']
-                    else:
-                        expert_names = [multi_expert_system.experts[name].name for name in experts_consulted]
-                        response = f"**Multi-Expert Consultation:** {', '.join(expert_names)}\n\n"
-                        for expert_name, expert_resp in expert_responses.items():
-                            expert_title = expert_resp['expert_title']
-                            response += f"**{expert_title}:**\n\n{expert_resp['main_response']}\n\n---\n\n"
+                    # Prepare response for chat history (preserve full format)
+                    response_parts = []
+                    
+                    # Add header only if not a follow-up
+                    if not recent_expert_response:
+                        if len(experts_consulted) == 1:
+                            expert_name = experts_consulted[0]
+                            expert_info = multi_expert_system.experts[expert_name]
+                            response_parts.append(f"#### 🎯 {expert_info.title} Analysis\n")
+                        else:
+                            expert_names = [multi_expert_system.experts[name].name for name in experts_consulted]
+                            response_parts.append(f"#### 🏭 Multi-Expert Consultation ({len(experts_consulted)} experts)")
+                            response_parts.append(f"**Experts consulted:** {', '.join(expert_names)}\n")
+                    
+                    # Add each expert's full response
+                    for expert_name, expert_resp in expert_responses.items():
+                        expert_title = expert_resp['expert_title']
+                        
+                        # Only show expert titles for multi-expert AND not follow-up
+                        if len(expert_responses) > 1 and not recent_expert_response:
+                            response_parts.append(f"### 👤 {expert_title}")
+                        
+                        response_parts.append(expert_resp['main_response'])
+                        
+                        if len(expert_responses) > 1:
+                            response_parts.append("---")
+                    
+                    response = "\n\n".join(response_parts)
                     
                     # Save expert consultation response to chat history
                     st.session_state.messages.append({"role": "assistant", "content": response})
