@@ -74,7 +74,8 @@ def handle_unified_chat_input(multi_expert_system):
         'maintenance': '@MaintenanceExpert',
         'product_development': '@ProductDevelopmentExpert',
         'process_engineering': '@ProcessEngineeringExpert',
-        'market_analysis': '@MarketAnalysisExpert'
+        'market_analysis': '@MarketAnalysisExpert',
+        'advanced_market_analyst': '@AdvancedMarketAnalyst'
     }
     
     # Show current mode above chat input
@@ -98,6 +99,8 @@ def handle_unified_chat_input(multi_expert_system):
                 expert_names.append('⚙️ Process')
             elif expert == 'market_analysis':
                 expert_names.append('📊 Market')
+            elif expert == 'advanced_market_analyst':
+                expert_names.append('🎯 Advanced Market')
         
         experts_text = ', '.join(expert_names)
         st.markdown(f"""
