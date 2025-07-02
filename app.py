@@ -58,96 +58,11 @@ def initialize_components():
     return config, doc_processor, embeddings_manager, vector_db, chat_history_manager
 
 def handle_unified_chat_input(multi_expert_system):
-    """Unified chat input with enhanced expert selection and quick reference"""
+    """Minimalist Apple-style chat input"""
     
-    available_experts = multi_expert_system.get_available_experts()
-    
-    st.markdown("### 💬 Ask your question:")
-    
-    # Apple-style Expert Quick Select - properly spaced
-    with st.container():
-        st.markdown("**🎯 Expert Quick Select**")
-        st.caption("Click to add expert to your message")
-        st.markdown("")  # Breathing room
-        
-        # Apple-style: 3 columns max to prevent cramming, with proper spacing
-        expert_list = list(available_experts.items())
-        
-        # Show in rows of 3 for clean Apple-style layout
-        for i in range(0, len(expert_list), 3):
-            cols = st.columns(3)
-            
-            for j, col in enumerate(cols):
-                if i + j < len(expert_list):
-                    expert_name, expert_info = expert_list[i + j]
-                    display_name = expert_name.replace("Expert", "")
-                    
-                    with col:
-                        if st.button(
-                            f"@{display_name}",
-                            key=f"quick_select_{expert_name}",
-                            help=f"{expert_info['title']}\n• {expert_info['specializations'][0]}",
-                            use_container_width=True
-                        ):
-                            # Store the mention for next input
-                            if "pending_mentions" not in st.session_state:
-                                st.session_state.pending_mentions = []
-                            if f"@{expert_name}" not in st.session_state.pending_mentions:
-                                st.session_state.pending_mentions.append(f"@{expert_name}")
-        
-        st.markdown("")  # Spacer
-        
-        # Show pending mentions if any - Apple-style clean presentation
-        if st.session_state.get("pending_mentions", []):
-            st.success(f"**Selected:** {' '.join(st.session_state.pending_mentions)}")
-            if st.button("🗑️ Clear", key="clear_mentions", use_container_width=False):
-                st.session_state.pending_mentions = []
-                st.rerun()
-    
-    # Apple-style syntax guide - clean and minimal
-    with st.expander("📝 @Mention Guide", expanded=False):
-        st.markdown("**Type @ in chat for expert consultation:**")
-        st.markdown("")
-        
-        # Clean list format instead of messy table
-        for expert_name, expert_info in available_experts.items():
-            clean_name = expert_name.replace("Expert", "")
-            main_spec = expert_info['specializations'][0] if expert_info['specializations'] else ""
-            
-            st.markdown(f"**@{clean_name}** — {main_spec}")
-        
-        st.divider()
-        st.markdown("**Examples:**")
-        st.code("""@Quality What's our contamination protocol?
-@Manufacturing equipment maintenance guide
-@Safety chemical handling procedures""")
-        st.markdown("")
-    
-    # Apple-style advanced selection - clean checkboxes
-    with st.expander("🔧 Advanced: Multiple Experts", expanded=False):
-        st.markdown("**Select multiple experts for comprehensive consultation:**")
-        st.markdown("")
-        
-        selected_experts = []
-        
-        # Single column for cleaner Apple-style layout
-        for expert_name, expert_info in expert_list:
-            clean_name = expert_name.replace('Expert', '')
-            if st.checkbox(
-                f"@{clean_name}",
-                key=f"expert_checkbox_{expert_name}",
-                help=f"{expert_info['title']}"
-            ):
-                selected_experts.append(expert_name)
-        
-        st.markdown("")
-        if selected_experts:
-            expert_names = [multi_expert_system.experts[name].name for name in selected_experts]
-            st.success(f"**Selected:** {', '.join(expert_names)}")
-    
-    # Regular chat input with enhanced placeholder
+    # Just the chat input - clean and simple
     user_input = st.chat_input(
-        "Ask about your SOPs or get expert insights... (Try: @Quality, @Manufacturing, @Safety, etc.)",
+        "Ask a question or @mention an expert",
         key="main_chat_input"
     )
     
@@ -667,15 +582,11 @@ def main():
     </style>
     """, unsafe_allow_html=True)
     
-    # Clean header without expert indicator
-    expert_mode = st.session_state.get('mode') == 'expert_consultant'
-    subtitle_text = "Advanced manufacturing expertise at your fingertips" if expert_mode else "Your knowledge companion for operational excellence"
-    
-    st.markdown(f"""
+    # Minimalist header - Apple style
+    st.markdown("""
     <div class="main-header">
-        <div class="sop-title">SOP Assistant</div>
-        <div class="main-title">Manufacturing Intelligence Hub</div>
-        <div class="subtitle">{subtitle_text}</div>
+        <div class="main-title">Manufacturing Knowledge Assistant</div>
+        <div class="subtitle">Ask questions. Get answers. Work smarter.</div>
     </div>
     """, unsafe_allow_html=True)
     
@@ -743,30 +654,19 @@ def main():
     with st.sidebar:
         st.markdown("### 🏭 Knowledge Assistant")
         
-        # Apple-style expert reference - properly spaced like iOS Settings
-        with st.expander("🎯 Expert Reference", expanded=False):
-            available_experts = multi_expert_system.get_available_experts()
+        # Simple help section
+        with st.expander("💡 Quick Tips", expanded=False):
+            st.markdown("""
+            **Expert Mentions:**
+            Type `@` followed by expert name
             
-            st.markdown("**Available Experts:**")
-            st.markdown("")  # Top breathing room
+            **Examples:**
+            • `@Quality` - Quality & compliance
+            • `@Manufacturing` - Production issues  
+            • `@Safety` - Safety protocols
             
-            # Each expert in its own clean section with visual separation
-            for i, (expert_name, expert_info) in enumerate(available_experts.items()):
-                clean_name = expert_name.replace("Expert", "")
-                main_focus = expert_info['specializations'][0] if expert_info['specializations'] else expert_info['expertise']
-                
-                # Apple-style card-like spacing
-                st.markdown(f"**@{clean_name}**")
-                st.caption(f"{main_focus}")
-                
-                # Add separator line between experts (except last one)
-                if i < len(available_experts) - 1:
-                    st.markdown("---")
-            
-            st.markdown("")  # Bottom breathing room
-            st.divider()
-            st.markdown("**Quick Examples:**")
-            st.code("@Quality contamination protocol?\n@Manufacturing equipment maintenance\n@Safety chemical handling procedures")
+            **Pro tip:** Ask normally for SOP search
+            """)
         
         # Usage stats (if helpful)
         with st.expander("📊 Session Info", expanded=False):
@@ -889,6 +789,35 @@ def main():
     if "messages" not in st.session_state:
         st.session_state.messages = []
     
+    # Apple-style clean welcome when no messages
+    if not st.session_state.messages:
+        st.markdown("## Welcome to your Knowledge Assistant")
+        st.markdown("")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("""
+            **🔍 Search SOPs**  
+            Just ask your question naturally
+            
+            **💬 Expert Consultation**  
+            Type @ to mention an expert
+            """)
+        
+        with col2:
+            st.markdown("""
+            **📊 1,506 SOPs Available**  
+            Comprehensive coverage
+            
+            **⚡ Fast & Accurate**  
+            Enhanced search system
+            """)
+        
+        st.markdown("")
+        st.markdown("---")
+        st.markdown("")
+    
+    # Display chat history
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             # Check if message contains HTML and render accordingly
