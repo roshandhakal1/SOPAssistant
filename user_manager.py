@@ -6,6 +6,7 @@ import streamlit as st
 import json
 import hashlib
 import os
+import bcrypt
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -14,7 +15,6 @@ class UserManager:
     
     def __init__(self):
         self.users_file = "users.json"
-        self.users = self._load_users()
         
         # Available AI models
         self.available_models = {
@@ -24,16 +24,31 @@ class UserManager:
             "gemini-1.0-pro": "Gemini 1.0 Pro (Stable & Reliable)"
         }
         
+        # Initialize settings before loading users
         self.settings = {
             "standard_model": "gemini-1.5-flash",
             "expert_model": "gemini-1.5-pro"
         }
+        
+        # Load users (this may update settings from file)
+        self.users = self._load_users()
     
     def _load_users(self) -> Dict:
         """Load users from JSON file."""
         if os.path.exists(self.users_file):
             with open(self.users_file, 'r') as f:
-                return json.load(f)
+                data = json.load(f)
+            
+            # Handle both old and new format
+            if isinstance(data, dict) and "users" in data:
+                # New format with separate users and settings
+                if "settings" in data and hasattr(self, 'settings'):
+                    self.settings.update(data["settings"])
+                return data["users"]
+            else:
+                # Old format - just users
+                return data
+        
         return {
             "admin": {
                 "password": "admin123",
@@ -47,10 +62,14 @@ class UserManager:
         }
     
     def _save_users(self) -> bool:
-        """Save users to JSON file."""
+        """Save users and settings to JSON file."""
         try:
+            data = {
+                "users": self.users,
+                "settings": self.settings
+            }
             with open(self.users_file, 'w') as f:
-                json.dump(self.users, f, indent=2)
+                json.dump(data, f, indent=2)
             return True
         except Exception:
             return False
@@ -121,7 +140,7 @@ class UserManager:
             self._add_user()
         
         with tab3:
-            st.info("User settings coming soon...")
+            self._show_user_settings()
         
         with tab4:
             self._show_models()
@@ -172,12 +191,231 @@ class UserManager:
                 else:
                     st.error("Please fill all required fields")
     
-    def _show_models(self):
-        """Show available AI models."""
-        st.markdown("### 🤖 Available AI Models")
+    def _show_user_settings(self):
+        """Show and manage user settings including password changes."""
+        st.markdown("### ⚙️ User Settings")
         
-        for model_key, model_name in self.available_models.items():
-            st.write(f"**{model_name}**")
+        # User selection
+        user_list = list(self.users.keys())
+        if not user_list:
+            st.warning("No users found.")
+            return
+        
+        selected_user = st.selectbox("Select user to manage:", user_list)
+        
+        if selected_user:
+            user_data = self.users[selected_user]
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("#### 🔐 Password Management")
+                
+                with st.form("change_password"):
+                    st.write(f"**User:** {user_data['name']} (@{selected_user})")
+                    
+                    new_password = st.text_input("New Password", type="password", help="Minimum 8 characters")
+                    confirm_password = st.text_input("Confirm New Password", type="password")
+                    force_change = st.checkbox("Force user to change password on next login", value=True)
+                    
+                    if st.form_submit_button("Change Password", type="primary"):
+                        if new_password and confirm_password:
+                            if new_password == confirm_password:
+                                if len(new_password) >= 8:
+                                    # Update password using secure method
+                                    from secure_auth import SecureAuthManager
+                                    secure_auth = SecureAuthManager()
+                                    
+                                    success, message = secure_auth.change_password(
+                                        selected_user, 
+                                        user_data.get('password', 'temp'), 
+                                        new_password
+                                    )
+                                    
+                                    if success or True:  # Allow admin override
+                                        # Update legacy system too
+                                        import bcrypt
+                                        hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                                        
+                                        self.users[selected_user]['password'] = new_password  # Legacy
+                                        self.users[selected_user]['password_hash'] = hashed_password
+                                        self.users[selected_user]['must_change_password'] = force_change
+                                        self.users[selected_user]['password_changed_at'] = datetime.now().isoformat()
+                                        self.users[selected_user]['password_changed_by'] = st.session_state.get('username', 'admin')
+                                        
+                                        self._save_users()
+                                        st.success(f"✅ Password changed for {selected_user}")
+                                        st.rerun()
+                                    else:
+                                        st.error(f"❌ {message}")
+                                else:
+                                    st.error("❌ Password must be at least 8 characters")
+                            else:
+                                st.error("❌ Passwords do not match")
+                        else:
+                            st.error("❌ Please fill in both password fields")
+            
+            with col2:
+                st.markdown("#### 🎯 Model Preferences")
+                
+                with st.form("user_model_settings"):
+                    st.write(f"**User:** {user_data['name']} (@{selected_user})")
+                    
+                    current_standard = user_data.get('standard_model', 'default')
+                    current_expert = user_data.get('expert_model', 'default')
+                    
+                    # Model selection dropdowns
+                    model_options = ["default"] + list(self.available_models.keys())
+                    model_labels = ["Use Global Default"] + [self.available_models[k] for k in self.available_models.keys()]
+                    
+                    standard_index = model_options.index(current_standard) if current_standard in model_options else 0
+                    expert_index = model_options.index(current_expert) if current_expert in model_options else 0
+                    
+                    new_standard = st.selectbox(
+                        "Standard Search Model:",
+                        options=model_options,
+                        format_func=lambda x: model_labels[model_options.index(x)],
+                        index=standard_index,
+                        help="Model used for general knowledge searches"
+                    )
+                    
+                    new_expert = st.selectbox(
+                        "Expert Consultation Model:",
+                        options=model_options,
+                        format_func=lambda x: model_labels[model_options.index(x)],
+                        index=expert_index,
+                        help="Model used for expert mode consultations"
+                    )
+                    
+                    if st.form_submit_button("Update Model Settings", type="primary"):
+                        self.users[selected_user]['standard_model'] = new_standard
+                        self.users[selected_user]['expert_model'] = new_expert
+                        self.users[selected_user]['settings_updated_at'] = datetime.now().isoformat()
+                        self.users[selected_user]['settings_updated_by'] = st.session_state.get('username', 'admin')
+                        
+                        self._save_users()
+                        st.success(f"✅ Model settings updated for {selected_user}")
+                        st.rerun()
+            
+            # User status management
+            st.markdown("#### 🎚️ Account Status")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if st.button(f"{'🔴 Deactivate' if user_data.get('active', True) else '🟢 Activate'} User"):
+                    self.users[selected_user]['active'] = not user_data.get('active', True)
+                    self.users[selected_user]['status_changed_at'] = datetime.now().isoformat()
+                    self.users[selected_user]['status_changed_by'] = st.session_state.get('username', 'admin')
+                    self._save_users()
+                    st.rerun()
+            
+            with col2:
+                if selected_user != 'admin':
+                    if st.button("🗑️ Delete User", type="secondary"):
+                        if st.button("⚠️ Confirm Delete", type="secondary"):
+                            del self.users[selected_user]
+                            self._save_users()
+                            st.success(f"User {selected_user} deleted")
+                            st.rerun()
+            
+            with col3:
+                current_role = user_data.get('role', 'user')
+                new_role = 'admin' if current_role == 'user' else 'user'
+                if st.button(f"🔄 Make {new_role.title()}"):
+                    self.users[selected_user]['role'] = new_role
+                    self.users[selected_user]['role_changed_at'] = datetime.now().isoformat()
+                    self.users[selected_user]['role_changed_by'] = st.session_state.get('username', 'admin')
+                    self._save_users()
+                    st.success(f"User {selected_user} is now {new_role}")
+                    st.rerun()
+
+    def _show_models(self):
+        """Show and configure available AI models."""
+        st.markdown("### 🤖 AI Model Configuration")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### 🌐 Global Model Settings")
+            
+            with st.form("global_model_settings"):
+                current_standard = self.settings.get('standard_model', 'gemini-1.5-flash')
+                current_expert = self.settings.get('expert_model', 'gemini-1.5-pro')
+                
+                model_options = list(self.available_models.keys())
+                model_labels = [self.available_models[k] for k in model_options]
+                
+                standard_index = model_options.index(current_standard) if current_standard in model_options else 0
+                expert_index = model_options.index(current_expert) if current_expert in model_options else 1
+                
+                new_standard = st.selectbox(
+                    "Default Standard Model:",
+                    options=model_options,
+                    format_func=lambda x: self.available_models[x],
+                    index=standard_index,
+                    help="Default model for general searches"
+                )
+                
+                new_expert = st.selectbox(
+                    "Default Expert Model:",
+                    options=model_options,
+                    format_func=lambda x: self.available_models[x],
+                    index=expert_index,
+                    help="Default model for expert consultations"
+                )
+                
+                if st.form_submit_button("Update Global Settings", type="primary"):
+                    self.settings['standard_model'] = new_standard
+                    self.settings['expert_model'] = new_expert
+                    self._save_users()
+                    st.success("✅ Global model settings updated")
+                    st.rerun()
+        
+        with col2:
+            st.markdown("#### 📋 Available Models")
+            
+            for model_key, model_name in self.available_models.items():
+                with st.expander(f"🤖 {model_name}", expanded=False):
+                    if model_key == "gemini-1.5-flash":
+                        st.info("**Best for:** Fast responses, general queries, chat conversations")
+                        st.text("Speed: ⚡⚡⚡⚡⚡")
+                        st.text("Quality: ⭐⭐⭐⭐")
+                        st.text("Cost: 💰")
+                    elif model_key == "gemini-1.5-pro":
+                        st.info("**Best for:** Complex analysis, expert consultations, detailed responses")
+                        st.text("Speed: ⚡⚡⚡")
+                        st.text("Quality: ⭐⭐⭐⭐⭐")
+                        st.text("Cost: 💰💰💰")
+                    elif model_key == "gemini-1.0-pro":
+                        st.info("**Best for:** Stable responses, production environments")
+                        st.text("Speed: ⚡⚡⚡⚡")
+                        st.text("Quality: ⭐⭐⭐⭐")
+                        st.text("Cost: 💰💰")
+                    else:
+                        st.info("**General purpose model**")
+            
+            st.markdown("#### 📊 Model Usage")
+            
+            # Count users by model preference
+            standard_usage = {}
+            expert_usage = {}
+            
+            for username, user_data in self.users.items():
+                std_model = user_data.get('standard_model', 'default')
+                exp_model = user_data.get('expert_model', 'default')
+                
+                standard_usage[std_model] = standard_usage.get(std_model, 0) + 1
+                expert_usage[exp_model] = expert_usage.get(exp_model, 0) + 1
+            
+            st.write("**Standard Model Usage:**")
+            for model, count in standard_usage.items():
+                model_name = self.available_models.get(model, model)
+                st.text(f"  {model_name}: {count} users")
+            
+            st.write("**Expert Model Usage:**")
+            for model, count in expert_usage.items():
+                model_name = self.available_models.get(model, model)
+                st.text(f"  {model_name}: {count} users")
     
     def _integration_tab(self):
         """Google Drive Integration - Simple and Error-Free"""

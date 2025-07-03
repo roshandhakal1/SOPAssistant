@@ -23,6 +23,7 @@ from multi_expert_system import MultiExpertSystem
 from auth import require_auth
 from chat_history_manager import ChatHistoryManager
 from cloud_storage import CloudStorageUI
+from security_middleware import SecurityMiddleware, secure_session, validate_input
 
 st.set_page_config(page_title="SOP Assistant", page_icon="📋", layout="wide")
 
@@ -31,6 +32,29 @@ st.set_page_config(page_title="SOP Assistant", page_icon="📋", layout="wide")
 
 # Require authentication before accessing the app
 auth_manager = require_auth()
+
+# SECURITY: Ensure session is valid and belongs to current user
+if not auth_manager.is_session_valid():
+    st.error("Session expired. Please log in again.")
+    auth_manager.logout()
+    st.rerun()
+
+# Check if user settings should be shown
+if hasattr(st.session_state, 'show_user_settings') and st.session_state.show_user_settings:
+    from user_settings_interface import UserSettingsInterface
+    
+    st.markdown("# ⚙️ My Settings")
+    
+    if st.button("🔙 Back to Main App", type="secondary"):
+        st.session_state.show_user_settings = False
+        st.rerun()
+    
+    st.markdown("---")
+    
+    # Initialize user settings interface and render
+    user_settings = UserSettingsInterface()
+    user_settings.render_user_settings_page()
+    st.stop()  # Stop here, don't render the main app
 
 # Check if admin portal should be shown
 if hasattr(st.session_state, 'show_admin_portal') and st.session_state.show_admin_portal:
@@ -987,6 +1011,26 @@ def main():
                         use_container_width=True
                     )
         
+        # User Settings Access (for all users)
+        st.divider()
+        
+        # Check if user needs to change password
+        username = st.session_state.get('username', '')
+        user_data = {}
+        try:
+            from user_manager import UserManager
+            user_manager = UserManager()
+            user_data = user_manager.users.get(username, {})
+        except:
+            pass
+        
+        if user_data.get('must_change_password', False):
+            st.warning("⚠️ Password change required")
+        
+        if st.button("⚙️ My Settings", use_container_width=True):
+            st.session_state.show_user_settings = True
+            st.rerun()
+        
         # Admin Portal Access (only for admin users)
         if hasattr(st.session_state, 'user_role') and st.session_state.user_role == 'admin':
             st.divider()
@@ -1132,11 +1176,24 @@ def main():
         # Process uploaded document
         if uploaded_file is not None:
             try:
+                # Validate file before processing
+                valid, error_msg = SecurityMiddleware.validate_file_upload(uploaded_file)
+                if not valid:
+                    st.error(f"File validation failed: {error_msg}")
+                    SecurityMiddleware.log_security_event("invalid_file_upload", {
+                        "filename": uploaded_file.name,
+                        "reason": error_msg
+                    })
+                    return
+                
+                # Sanitize filename
+                safe_filename = SecurityMiddleware.sanitize_filename(uploaded_file.name)
+                
                 # Import document processor
                 doc_processor = DocumentProcessor()
                 
                 # Process the uploaded file
-                with st.spinner(f"Processing {uploaded_file.name}..."):
+                with st.spinner(f"Processing {safe_filename}..."):
                     # Save uploaded file temporarily
                     import tempfile
                     import os
@@ -1207,6 +1264,23 @@ def main():
     prompt = handle_unified_chat_input(multi_expert_system)
     
     if prompt:
+        # Validate and sanitize user input
+        valid, sanitized_prompt, error_msg = validate_input(prompt, "text", max_length=2000)
+        if not valid:
+            st.error(f"Invalid input: {error_msg}")
+            return
+        
+        # Additional security check for injection attempts
+        valid, error_msg = SecurityMiddleware.validate_search_query(sanitized_prompt)
+        if not valid:
+            st.error(f"Security warning: {error_msg}")
+            SecurityMiddleware.log_security_event("suspicious_query", {
+                "query": SecurityMiddleware.hash_sensitive_data(prompt),
+                "reason": error_msg
+            })
+            return
+        
+        prompt = sanitized_prompt
         # Add user message to history
         st.session_state.messages.append({"role": "user", "content": prompt})
         
