@@ -1,0 +1,12 @@
+v2025.07.02-SECURITY-SETTINGS
+
+🔒 Security & User Settings Release
+- Corporate-grade authentication system
+- User self-service settings portal  
+- Customizable AI model selection
+- Enhanced admin portal
+- Comprehensive audit logging
+- Rate limiting and session protection
+
+Deployment timestamp: 2025-07-02 19:25:00 PST
+Git commit: 467c498
